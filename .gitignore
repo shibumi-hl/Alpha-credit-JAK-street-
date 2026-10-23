@@ -1,0 +1,13 @@
+data/
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.agent/
+.verify/
+.worktrees/
+.wt-offset
+handoffs/
+docs/specs/
+reports/*.csv
+.env

@@ -1,0 +1,60 @@
+{
+  "_note": "Иллюстративные допущения для risk-based pricing, не ставки конкретного банка",
+  "funding_spread": 0.015,
+  "fallback_funding": 0.16,
+  "lgd": {
+    "secured": 0.35,
+    "express": 0.7,
+    "overdraft": 0.65,
+    "credit_line": 0.6,
+    "seller_credit": 0.55,
+    "card": 0.75
+  },
+  "guarantee_coverage": 0.5,
+  "capital": {
+    "approach": "irb",
+    "risk_weight": 0.75,
+    "car": 0.12,
+    "cost_of_equity": 0.25,
+    "irb": {
+      "_source": "Положение Банка России 845-П: пол PD п. 9.1, LGD базового ПВР п. 10.1, пол LGD розницы п. 10.9, залог п. 17.7/17.14, M п. 11.1, розница МСП п. 1.4, МСП п. 3.3",
+      "pd_floor": 0.0007,
+      "confidence": 0.999,
+      "retail_max_exposure_rub": 70000000,
+      "maturity_years": 2.5,
+      "sme_revenue_limit_mln": 2000,
+      "sme_max_adjustment": 0.04,
+      "lgd_corporate_unsecured": 0.4,
+      "lgd_retail_floor_unsecured": 0.3,
+      "collateral": {
+        "lgd_secured": 0.2,
+        "haircut": 0.4,
+        "lgd_floor_secured": 0.1,
+        "value_to_loan": 1.5
+      }
+    }
+  },
+  "opex": {
+    "rate": 0.01,
+    "fixed_rub_per_year": 5000
+  },
+  "margin": 0.02,
+  "discounts": {
+    "bank_turnover_40": 0.01,
+    "bank_turnover_100": 0.02,
+    "subscription": 0.005,
+    "insurance": 0.01
+  },
+  "fee": {
+    "secured": 0.01,
+    "express": 0.02,
+    "overdraft": 0.01,
+    "credit_line": 0.015,
+    "seller_credit": 0.01,
+    "card": 0.0
+  },
+  "insurance_rate": 0.015,
+  "insurance_required": [
+    "secured"
+  ]
+}

@@ -1,0 +1,107 @@
+import json
+import warnings
+from datetime import date
+from pathlib import Path
+
+import pytest
+
+from scoring.gcurve import CurveStore
+from scoring import synth
+from scoring.whatif import SCENARIOS, Engine, evaluate, whatif
+
+warnings.filterwarnings("ignore")
+ASOF = date(2024, 2, 1)
+CURVES = CurveStore.from_csv(Path(__file__).parent / "fixtures" / "gcurve_params.csv")
+
+
+@pytest.fixture(scope="module")
+def eng():
+    df = synth.generate(12000, seed=41, asof=ASOF)
+    engine, rep = Engine.fit(df, curves=CURVES, asof=ASOF, seed=5)
+    return df, engine, rep
+
+
+def _app(df, **kw):
+    return {**df.iloc[0].to_dict(), **kw}
+
+
+def test_fit_reports_both_models_and_chains_price_into_decisions(eng):
+    df, engine, rep = eng
+    assert rep["scorecard"]["gini_test"] > 0.3
+    assessed = rep["assessed"]
+    assert {"rate", "all_in", "approval_probability"} <= set(assessed.columns)
+    priced = assessed[assessed.offered_amount > 0]
+    assert (priced.all_in >= priced.rate - 1e-9).all() and priced.rate.between(0.05, 0.6).all()
+    assert (assessed.loc[assessed.stop_codes.str.len() > 0, "approval_probability"] == 0).all()
+
+
+def test_evaluate_is_json_ready_and_complete(eng):
+    df, engine, _ = eng
+    r = evaluate(engine, _app(df))
+    json.dumps(r, ensure_ascii=False)
+    assert {"pd", "risk_class", "approval_probability", "outcome", "offered_product", "pricing", "reasons",
+            "approval_explain"} <= set(r)
+    assert 0 <= r["approval_probability"] <= 1
+
+
+def test_collateral_makes_credit_cheaper(eng):
+    df, engine, _ = eng
+    base_app = _app(df, product="express", bki_current_dpd=0, bki_max_dpd_12m=0, tax_debt_to_revenue=0.0,
+                    status="ACTIVE", ebit=df.iloc[0].revenue * 0.2, debt_service=0.0, insurance=1)
+    out = whatif(engine, base_app)
+    base, sc = out["base"], {s["key"]: s for s in out["scenarios"]}
+    assert "collateral" in sc
+    assert sc["collateral"]["rate"] < base["pricing"]["rate"]
+    assert sc["collateral"]["delta_rate_pp"] == pytest.approx(100 * (sc["collateral"]["rate"] - base["pricing"]["rate"]))
+    assert sc["collateral"]["delta_approval_pp"] == pytest.approx(
+        100 * (sc["collateral"]["approval_probability"] - base["approval_probability"]))
+    assert sc["collateral"]["delta_approval_pp"] >= 0  # залог не снижает шанс одобрения
+    assert sc["no_insurance"]["all_in"] < base["pricing"]["all_in"] or sc["no_insurance"]["rate"] > base["pricing"]["rate"]
+
+
+def test_scenarios_that_do_not_apply_are_skipped(eng):
+    df, engine, _ = eng
+    keys = {s["key"] for s in whatif(engine, _app(df, product="secured", guarantee=1))["scenarios"]}
+    assert "collateral" not in keys and "guarantee" not in keys
+    assert keys <= set(SCENARIOS)
+
+
+def test_stop_factor_means_zero_chance_and_reason(eng):
+    df, engine, _ = eng
+    r = evaluate(engine, _app(df, bki_current_dpd=60))
+    assert r["outcome"] == "REJECT" and r["approval_probability"] == 0
+    assert r["stop_factors"][0]["code"] == "S01"
+
+
+
+def test_request_within_limit_keeps_monthly_bank_turnover():
+    _, _, change = SCENARIOS["amount_to_limit"]
+    a = {"product": "overdraft", "requested_amount": 2e6, "has_rko": 1, "bank_turnover_ratio": 0.5}
+    c = change(a, {"limit": 1e6})
+    assert c["requested_amount"] == 1e6
+    assert c["bank_turnover_ratio"] * c["requested_amount"] == pytest.approx(0.5 * 2e6)
+
+
+def test_application_defaults_and_validation(eng):
+    df, engine, _ = eng
+    app = _app(df)
+    for k in ("product", "has_rko", "marketplace", "guarantee", "subscription", "insurance", "bank_turnover_ratio"):
+        app.pop(k, None)
+    r = evaluate(engine, app)
+    assert r["product"] == engine.policy["default_product"]
+    with pytest.raises(ValueError, match="продукт"):
+        evaluate(engine, _app(df, product="leasing"))
+    nan = evaluate(engine, _app(df, ebit=float("nan"), bki_current_dpd=None))
+    assert nan["outcome"] == "REQUEST_INFO" and nan["offered_amount"] == 0
+
+
+def test_whatif_works_on_a_minimal_application(eng):
+    df, engine, _ = eng
+    app = _app(df)
+    for k in ("product", "has_rko", "marketplace", "guarantee", "subscription", "insurance", "bank_turnover_ratio"):
+        app.pop(k, None)
+    app["status"] = None
+    out = whatif(engine, app)
+    assert out["base"]["product"] == engine.policy["default_product"]
+    assert "S07" not in [s["code"] for s in out["base"]["stop_factors"]]
+    assert out["scenarios"] and {"collateral", "rko_turnover"} <= {s["key"] for s in out["scenarios"]}
