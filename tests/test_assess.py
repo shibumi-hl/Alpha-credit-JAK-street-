@@ -124,3 +124,27 @@ def test_train_builds_reports_for_both_capital_approaches(tmp_path, monkeypatch)
                                       "--report-dir", str(tmp_path)])
     tr.main()
     assert Engine.load(tmp_path / "scoring" / "engine.pkl").pricing["capital"]["approach"] == "standard"
+
+
+def test_real_check_on_the_holdout_half(tmp_path):
+    import numpy as np
+    from scoring.realcheck import HOLDOUT, half
+    from scoring.scorecard import train
+    tr = _load("train_scorecard")
+    df = synth.generate(6000, seed=8, asof=date(2026, 10, 23))
+    model, _ = train(df, seed=2)
+    assert tr.real_check(df, model, tmp_path) is None  # нет данных ЕГРЮЛ - нет раздела
+    rng = np.random.default_rng(8)
+    event = (rng.random(len(df)) < np.where(df.default_12m == 1, 0.5, 0.01))
+    comp = pd.DataFrame({"inn": df.inn, "status": np.where(event, "INACTIVE", "ACTIVE"), "bfo_date": "2026-03-20"})
+    (tmp_path / "fns").mkdir()
+    comp.to_csv(tmp_path / "fns" / "companies.csv", index=False, encoding="utf-8-sig")
+    eg = tmp_path / "raw" / "egrul"
+    eg.mkdir(parents=True)
+    for inn in df.inn[event]:
+        (eg / f"{inn}.json").write_text(json.dumps({"inn": inn, "method": "Исключение юридического лица из ЕГРЮЛ",
+                                                    "end_date_pdf": "01.08.2026"}, ensure_ascii=False), encoding="utf-8")
+    rep = tr.real_check(df, model, tmp_path, n_boot=50)
+    holdout_events = sum(1 for inn in df.inn[event] if half(inn) == HOLDOUT)
+    assert rep["events"] == holdout_events
+    assert rep["table"].iloc[0]["gini_full"] > 0.2

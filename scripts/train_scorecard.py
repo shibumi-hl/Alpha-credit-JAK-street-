@@ -30,6 +30,8 @@ from scoring.gcurve import CurveStore  # noqa: E402
 from scoring.assess import OUTCOMES  # noqa: E402
 from scoring.credit import ELIGIBILITY, STOPS  # noqa: E402
 from scoring.pricing import load_pricing  # noqa: E402
+from scoring.realcheck import validate as validate_real, real_label  # noqa: E402
+from scoring.synth import load_calibration  # noqa: E402
 from scoring.reasons import CATEGORIES  # noqa: E402
 from scoring.whatif import Engine  # noqa: E402
 
@@ -71,7 +73,42 @@ def capital_note(capital: dict) -> tuple[str, str]:
             f"капитал = плоский вес риска {rw:.0%} × норматив × (стоимость капитала − фондирование).")
 
 
-def write_report(path: Path, fit: dict, src: str, capital: dict):
+def real_check(df: pd.DataFrame, model, data_dir: Path, n_boot: int = 1000) -> dict | None:
+    """Проверка PD-скоркарты на реальной метке ЕГРЮЛ (отложенная половина) или None, если данных ЕГРЮЛ нет."""
+    egrul, comp = data_dir / "raw" / "egrul", data_dir / "fns" / "companies.csv"
+    if not egrul.is_dir() or not comp.exists():
+        return None
+    companies = pd.read_csv(comp, dtype={"inn": str}, encoding=ENC, usecols=["inn", "status", "bfo_date"])
+    label = real_label(companies, egrul)
+    if label.event.sum() == 0:
+        return None
+    scored = pd.concat([df[["inn", "debt"]].reset_index(drop=True) if "debt" in df else
+                        df[["inn"]].assign(debt=0.0).reset_index(drop=True),
+                        model.score(df).reset_index(drop=True)], axis=1)
+    return validate_real(scored, label, n_boot=n_boot)
+
+
+def _real_section(real: dict | None) -> list:
+    if real is None:
+        return []
+    t = real["table"].copy()
+    ci = lambda g, lo, hi: "" if pd.isna(g) else f"{g:.2f} [{lo:.2f}; {hi:.2f}]"  # noqa: E731
+    for col in ("gini_full", "full_lo", "full_hi", "gini_real", "real_lo", "real_hi"):
+        if col not in t:
+            t[col] = float("nan")
+    view = pd.DataFrame({"событие": t["событие"], "компании": t["компании"], "событий": t["events"], "n": t["n"],
+                         "Gini полного балла": [ci(*r) for r in t[["gini_full", "full_lo", "full_hi"]].to_numpy()],
+                         "Gini реальных факторов": [ci(*r) for r in t[["gini_real", "real_lo", "real_hi"]].to_numpy()]})
+    weights = "по реальной метке ЕГРЮЛ (половина «калибровка»)" if load_calibration() else "ручные"
+    return ["## Проверка на реальной метке (ЕГРЮЛ, отложенная половина)", "",
+            "Событие - банкротство или исключение налоговой после подачи отчёта; контроль - действующие компании; "
+            "ликвидации и реорганизации не учитываются. Считается только на половине «проверка» (по хэшу ИНН), "
+            f"не участвовавшей в подборе весов скрытой логики. Веса реальных слагаемых: {weights}. Реальные факторы: "
+            f"{', '.join(real['real_factors'])} (без налогового долга). В скобках - 95% бутстреп-интервал.", "",
+            _md(view), "", "### Доля событий по классам риска (отложенная половина)", "", _md(real["classes"]), ""]
+
+
+def write_report(path: Path, fit: dict, src: str, capital: dict, real: dict | None = None):
     rep, out = fit["scorecard"], fit["assessed"]
     title, formula = capital_note(capital)
     oc = out.outcome.value_counts().reindex(OUTCOMES, fill_value=0)
@@ -112,6 +149,7 @@ def write_report(path: Path, fit: dict, src: str, capital: dict):
                           "компаний": first.values})), "",
         "## Стоп-факторы", "",
         _md(pd.DataFrame({"код": stops.index, "категория": [STOPS[c] for c in stops.index], "компаний": stops.values})), "",
+        *_real_section(real),
         "## IV факторов PD", "", _md(rep["iv"]), "",
         "## Баллы PD-скоркарты по бинам", "", _md(t, ".3f"), "",
         "_Ограничения: метка дефолта, БКИ, сезонность и поля заявки синтетические; одобрение известно только для "
@@ -132,7 +170,7 @@ def run(df: pd.DataFrame, pricing: dict, a, src: str) -> Path:
     flat.to_csv(a.data_dir / "scoring" / "assessed.csv", index=False, encoding=ENC)
     approach = pricing["capital"]["approach"]
     rp = a.report_dir / f"scorecard_{date.today().isoformat()}_{approach}.md"
-    write_report(rp, fit, src, pricing["capital"])
+    write_report(rp, fit, src, pricing["capital"], real_check(df, engine.scorecard, a.data_dir))
     rep = fit["scorecard"]
     print(f"[{approach}] PD: Gini test {rep['gini_test']:.3f}, KS {rep['ks_test']:.3f}, факторов {len(rep['factors'])}; "
           f"одобрение: {fit['approval_n']:,} решений; средняя ставка {out.rate.mean():.1%}, ПСК {out.all_in.mean():.1%}; "
