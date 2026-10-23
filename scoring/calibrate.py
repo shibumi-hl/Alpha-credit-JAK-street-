@@ -15,14 +15,15 @@ FIT_TERMS = ["lev", "loss", "age_lt24", "weak_eq", "dscr_lt1", "dscr_1_13", "fal
              "age_lt36"]
 
 
-def fit_weights(terms: pd.DataFrame, sections: pd.Series, event, c: float = 1.0) -> dict:
-    """{weights: {слагаемое: вес}, sector: {раздел: сдвиг}, dropped: [...]} - веса в лог-шансах."""
+def fit_weights(terms: pd.DataFrame, sections: pd.Series, event, c: float = 1.0, sample_weight=None) -> dict:
+    """{weights: {слагаемое: вес}, sector: {раздел: сдвиг}, dropped: [...]} - веса в лог-шансах.
+    sample_weight - веса наблюдений (например, банкротство важнее исключения налоговой)."""
     y = np.asarray(event, int)
     sec = pd.get_dummies(pd.Series(sections).fillna("NA").astype(str).to_numpy(), prefix="sec", dtype=float)
     keep, dropped = list(FIT_TERMS), []
     while True:
         X = pd.concat([terms[keep].reset_index(drop=True), sec], axis=1)
-        lr = LogisticRegression(C=c, max_iter=5000).fit(X.to_numpy(), y)
+        lr = LogisticRegression(C=c, max_iter=5000).fit(X.to_numpy(), y, sample_weight=sample_weight)
         coef = dict(zip(X.columns, lr.coef_[0]))
         wrong = [t for t in keep if coef[t] < 0]
         if not wrong:

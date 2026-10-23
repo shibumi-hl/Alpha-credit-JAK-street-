@@ -87,3 +87,17 @@ def test_script_fits_on_the_calibration_half_and_writes_config(tmp_path, monkeyp
     calib_events = sum(1 for inn in raw.inn[event] if half(inn) == CALIBRATION)
     assert res["events"] == calib_events and res["half"] == CALIBRATION
     assert set(res["weights"]) == set(FIT_TERMS) and res["weights"]["loss"] > 1.0
+
+
+def test_sample_weights_shift_the_fit_towards_upweighted_events():
+    rng = np.random.default_rng(5)
+    n = 40000
+    X = _terms(n, rng)
+    a = rng.random(n) < 1 / (1 + np.exp(-(-4.5 + 1.5 * X["weak_eq"])))  # «банкротства»: отрицательный капитал
+    b = rng.random(n) < 1 / (1 + np.exp(-(-4.0 + 1.5 * X["small"])))   # «брошенные фирмы»: малая выручка
+    y = (a | b).astype(int)
+    sec = pd.Series(["G"] * n)
+    plain = fit_weights(X, sec, y, c=10.0)["weights"]
+    heavy = fit_weights(X, sec, y, c=10.0, sample_weight=np.where(a, 5.0, 1.0))["weights"]
+    assert heavy["weak_eq"] > plain["weak_eq"] + 0.3
+    assert heavy["small"] < plain["small"]
