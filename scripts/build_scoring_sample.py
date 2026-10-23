@@ -3,6 +3,8 @@
 
 Реальные: оборот, возраст, ОКВЭД, долговая нагрузка, покрытие, рост выручки, налоговый долг.
 Синтетика: просрочки БКИ, сезонность выручки, сумма и срок заявки, default_12m по скрытой логике.
+Веса реальных слагаемых скрытой логики - из config/synth_calibration.json (scripts/calibrate_synth.py, подобраны по
+банкротствам и исключениям из ЕГРЮЛ), если файл есть; полностью синтетическая выборка - всегда на ручных весах.
 
 Запуск из папки проекта (после load_fns_opendata.py и load_girbo.py):
   py scripts/build_scoring_sample.py                    # из data/fns/companies.csv
@@ -52,8 +54,9 @@ def main():
     else:
         raw = pd.read_csv(a.data_dir / "fns" / "companies.csv", dtype={"inn": str, "okved": str}, encoding=ENC)
         check_known_before(raw, a.asof)
-        df = synth.enrich(raw, a.seed, a.asof, a.default_rate)
-        src = "ФНС + ГИР БО + синтетика"
+        weights = synth.load_calibration()  # веса реальных слагаемых по ЕГРЮЛ (calibrate_synth.py), если есть
+        df = synth.enrich(raw, a.seed, a.asof, a.default_rate, weights=weights)
+        src = "ФНС + ГИР БО + синтетика, веса " + ("по реальной метке ЕГРЮЛ" if weights else "ручные")
     out = a.data_dir / "scoring" / "train.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out, index=False, encoding=ENC)

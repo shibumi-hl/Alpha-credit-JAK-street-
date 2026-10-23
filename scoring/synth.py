@@ -7,7 +7,9 @@ features() считает наблюдаемые признаки из реал�
 скрытой логике с шумом. Скрытый риск наружу не отдаётся - скоркарта видит только признаки.
 generate() синтезирует и реальную часть (для тестов и прогона без загрузки ФНС).
 """
+import json
 from datetime import date
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -127,23 +129,58 @@ def _bki(f, stress, rng):
     return dpd, cnt, cur
 
 
-def _logit(f: pd.DataFrame, stress, rng) -> np.ndarray:
-    """Скрытая логика дефолта: нелинейные пороги, взаимодействие, отраслевой сдвиг, шум."""
-    sector = f.okved_section.map(_SECTOR_RISK).fillna(0).to_numpy()
+# Веса реальных слагаемых скрытой логики (лог-шансы). Ручные - по умолчанию; подобранные по реальной метке ЕГРЮЛ
+# (scripts/calibrate_synth.py) лежат в config/synth_calibration.json и используются при сборке выборки из ФНС.
+DEFAULT_WEIGHTS = {"lev": 0.99, "loss": 0.72, "tax": 0.45, "age_lt24": 0.45, "weak_eq": 0.54, "dscr_lt1": 0.8,
+                   "dscr_1_13": 0.3, "fall": 0.6, "small": 0.4, "short12": 0.9, "short13_24": 0.4, "age_lt36": 0.4,
+                   "sector": dict(_SECTOR_RISK)}
+CALIBRATION_PATH = Path(__file__).resolve().parents[1] / "config" / "synth_calibration.json"
+
+
+def real_terms(f: pd.DataFrame) -> pd.DataFrame:
+    """Слагаемые скрытой логики, построенные только из реальных полей (ФНС, ГИР БО)."""
+    return pd.DataFrame({
+        "lev": np.log1p(np.clip(f.debt_to_revenue, 0, 10)),
+        "loss": (f.ebit < 0).astype(float),
+        "tax": np.log1p(200 * np.clip(f.tax_debt_to_revenue, 0, 1)),
+        "age_lt24": (f.age_months < 24).astype(float),
+        "weak_eq": (f.equity_ratio < 0).astype(float),
+        "dscr_lt1": (f.dscr < 1).astype(float),
+        "dscr_1_13": ((f.dscr >= 1) & (f.dscr < 1.3)).astype(float),
+        "fall": (f.revenue_growth.fillna(0) < -0.3).astype(float),
+        "small": (f.revenue < 5e6).astype(float),
+        "short12": (f.turnover_months <= 12).astype(float),
+        "short13_24": ((f.turnover_months > 12) & (f.turnover_months <= 24)).astype(float),
+        "age_lt36": (f.age_months < 36).astype(float),
+    }, index=f.index)
+
+
+def load_calibration(path: Path = CALIBRATION_PATH) -> dict | None:
+    """Веса из калибровки по реальной метке или None, если файла нет."""
+    if not Path(path).exists():
+        return None
+    cal = json.loads(Path(path).read_text(encoding="utf-8"))
+    return {**DEFAULT_WEIGHTS, **cal["weights"], "sector": cal.get("sector", DEFAULT_WEIGHTS["sector"])}
+
+
+def _real_part(f: pd.DataFrame, weights: dict) -> np.ndarray:
+    terms = real_terms(f)
+    z = sum(weights[k] * terms[k].to_numpy() for k in terms.columns)
+    return z + f.okved_section.map(weights["sector"]).fillna(0).to_numpy()
+
+
+def _logit(f: pd.DataFrame, stress, rng, weights: dict = DEFAULT_WEIGHTS) -> np.ndarray:
+    """Скрытая логика дефолта: реальные слагаемые с весами (ручными или подобранными по ЕГРЮЛ), синтетические
+    слагаемые (БКИ, продукт, сезонность × долг, РКО, маркетплейс, сумма, гарантия), шум."""
     over = np.select([f.bki_max_dpd_12m > 90, f.bki_max_dpd_12m > 30, f.bki_max_dpd_12m > 0], [2.0, 1.2, 0.4], 0)
     current = np.where(f.bki_current_dpd > 30, 1.5, np.where(f.bki_current_dpd > 0, 0.6, 0))
-    dscr_weak = np.where(f.dscr < 1, 0.8, np.where(f.dscr < 1.3, 0.3, 0))
     season_x_lev = 1.2 * np.clip(f.revenue_cv - 0.25, 0, None) * np.log1p(np.clip(f.debt_to_revenue, 0, 10))
-    fall = np.where(f.revenue_growth.fillna(0) < -0.3, 0.6, 0)
-    small = np.where(f.revenue < 5e6, 0.4, 0)
-    short = np.select([f.turnover_months <= 12, f.turnover_months <= 24], [0.9, 0.4], 0)
-    young = np.where(f.age_months < 36, 0.4, 0)
     product = f["product"].map(_PRODUCT_RISK).fillna(0).to_numpy()
     in_bank = np.select([f.bank_turnover_ratio >= 1, f.bank_turnover_ratio >= 0.4], [-0.5, -0.25], 0)
     mp = np.where(f.marketplace == 1, -0.25, 0)
     big = np.select([f.amount_to_revenue > 0.3, f.amount_to_revenue > 0.1], [0.5, 0.15], 0)
     gar = np.where(f.guarantee == 1, -0.1, 0)
-    return (0.9 * stress + over + current + dscr_weak + season_x_lev + fall + small + short + young + sector
+    return (_real_part(f, weights) + over + current + season_x_lev
             + product + in_bank + mp + big + gar + rng.normal(0, NOISE, len(f)))
 
 
@@ -182,7 +219,8 @@ def _calibrate(z: np.ndarray, target: float) -> float:
     return (lo + hi) / 2
 
 
-def enrich(raw: pd.DataFrame, seed: int, asof: date, default_rate: float = 0.05) -> pd.DataFrame:
+def enrich(raw: pd.DataFrame, seed: int, asof: date, default_rate: float = 0.05, weights: dict = None) -> pd.DataFrame:
+    """Признаки + синтетика + метка. weights - веса реальных слагаемых (по умолчанию ручные)."""
     rng = np.random.default_rng(seed)
     f = features(raw.reset_index(drop=True), asof)
     n = len(f)
@@ -191,7 +229,7 @@ def enrich(raw: pd.DataFrame, seed: int, asof: date, default_rate: float = 0.05)
     f["revenue_cv"] = np.clip(base * np.exp(rng.normal(0, 0.35, n)) + 0.05 * np.minimum(stress, 3) * rng.random(n), 0.02, 1.5)
     f["bki_max_dpd_12m"], f["bki_overdue_cnt_12m"], f["bki_current_dpd"] = _bki(f, stress, rng)
     _application(f, rng)
-    z = _logit(f, stress, rng)
+    z = _logit(f, stress, rng, weights or DEFAULT_WEIGHTS)
     p = 1 / (1 + np.exp(-(z + _calibrate(z, default_rate))))
     f["default_12m"] = (rng.random(n) < p).astype(int)
     return f
