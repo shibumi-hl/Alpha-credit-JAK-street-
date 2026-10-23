@@ -124,3 +124,78 @@ def test_train_builds_reports_for_both_capital_approaches(tmp_path, monkeypatch)
                                       "--report-dir", str(tmp_path)])
     tr.main()
     assert Engine.load(tmp_path / "scoring" / "engine.pkl").pricing["capital"]["approach"] == "standard"
+
+
+def test_real_check_on_the_holdout_half(tmp_path):
+    import numpy as np
+    from scoring.realcheck import HOLDOUT, half
+    from scoring.scorecard import train
+    tr = _load("train_scorecard")
+    df = synth.generate(6000, seed=8, asof=date(2026, 10, 23))
+    model, _ = train(df, seed=2)
+    assert tr.real_check(df, model, tmp_path) is None  # нет данных ЕГРЮЛ - нет раздела
+    rng = np.random.default_rng(8)
+    event = (rng.random(len(df)) < np.where(df.default_12m == 1, 0.5, 0.01))
+    comp = pd.DataFrame({"inn": df.inn, "status": np.where(event, "INACTIVE", "ACTIVE"), "bfo_date": "2026-03-20"})
+    (tmp_path / "fns").mkdir()
+    comp.to_csv(tmp_path / "fns" / "companies.csv", index=False, encoding="utf-8-sig")
+    eg = tmp_path / "raw" / "egrul"
+    eg.mkdir(parents=True)
+    for inn in df.inn[event]:
+        (eg / f"{inn}.json").write_text(json.dumps({"inn": inn, "method": "Исключение юридического лица из ЕГРЮЛ",
+                                                    "end_date_pdf": "01.08.2026"}, ensure_ascii=False), encoding="utf-8")
+    rep = tr.real_check(df, model, tmp_path, n_boot=50)
+    holdout_events = sum(1 for inn in df.inn[event] if half(inn) == HOLDOUT)
+    assert rep["events"] == holdout_events
+    assert rep["table"].iloc[0]["gini_full"] > 0.2
+
+
+def test_report_has_the_real_label_section_only_for_the_real_sample(tmp_path, monkeypatch):
+    import numpy as np
+    build, tr = _load("build_scoring_sample"), _load("train_scorecard")
+    raw = synth.generate_real(6000, np.random.default_rng(9), date(2026, 10, 23))
+    raw["bfo_date"] = "2026-03-20"
+    raw["debtam_date"] = None
+    rng = np.random.default_rng(9)
+    event = rng.random(len(raw)) < np.where(raw.ebit < 0, 0.10, 0.01)
+    raw["status"] = np.where(event, "INACTIVE", "ACTIVE")
+    (tmp_path / "fns").mkdir()
+    raw.to_csv(tmp_path / "fns" / "companies.csv", index=False, encoding="utf-8-sig")
+    eg = tmp_path / "raw" / "egrul"
+    eg.mkdir(parents=True)
+    for inn in raw.inn[event]:
+        (eg / f"{inn}.json").write_text(json.dumps({"inn": inn, "method": "Исключение юридического лица из ЕГРЮЛ",
+                                                    "end_date_pdf": "01.08.2026"}, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["x", "--asof", "2026-10-23", "--data-dir", str(tmp_path)])
+    build.main()
+    meta = json.loads((tmp_path / "scoring" / "train_meta.json").read_text(encoding="utf-8"))
+    assert meta["source"] == "real" and meta["weights"] in ("egrul", "manual")
+    monkeypatch.setattr(sys, "argv", ["x", "--data-dir", str(tmp_path), "--report-dir", str(tmp_path / "rep")])
+    tr.main()
+    real_report = next((tmp_path / "rep").glob("scorecard_*.md")).read_text(encoding="utf-8")
+    assert "## Проверка на реальной метке" in real_report
+    monkeypatch.setattr(sys, "argv", ["x", "--synthetic", "3000", "--data-dir", str(tmp_path)])
+    build.main()  # синтетика с теми же папками ФНС и ЕГРЮЛ рядом
+    monkeypatch.setattr(sys, "argv", ["x", "--data-dir", str(tmp_path), "--report-dir", str(tmp_path / "syn")])
+    tr.main()
+    syn_report = next((tmp_path / "syn").glob("scorecard_*.md")).read_text(encoding="utf-8")
+    assert "## Проверка на реальной метке" not in syn_report
+
+
+def test_calibrated_weights_are_opt_in(tmp_path, monkeypatch):
+    import numpy as np
+    build = _load("build_scoring_sample")
+    raw = synth.generate_real(500, np.random.default_rng(2), date(2026, 10, 23))
+    raw["bfo_date"], raw["debtam_date"] = "2026-03-20", None
+    (tmp_path / "fns").mkdir()
+    raw.to_csv(tmp_path / "fns" / "companies.csv", index=False, encoding="utf-8-sig")
+    cal = tmp_path / "cal.json"
+    cal.write_text(json.dumps({"weights": {"loss": 3.0}, "sector": {}}), encoding="utf-8")
+    monkeypatch.setattr(synth, "CALIBRATION_PATH", cal)
+    monkeypatch.setattr(sys, "argv", ["x", "--asof", "2026-10-23", "--data-dir", str(tmp_path)])
+    build.main()
+    meta = json.loads((tmp_path / "scoring" / "train_meta.json").read_text(encoding="utf-8"))
+    assert meta["weights"] == "manual"  # файл калибровки есть, но без ключа не применяется
+    monkeypatch.setattr(sys, "argv", ["x", "--asof", "2026-10-23", "--calibrated-weights", "--data-dir", str(tmp_path)])
+    build.main()
+    assert json.loads((tmp_path / "scoring" / "train_meta.json").read_text(encoding="utf-8"))["weights"] == "egrul"
