@@ -30,7 +30,7 @@ PRODUCTS = ["secured", "express", "overdraft", "credit_line", "seller_credit", "
 _PRODUCT_P = [.20, .30, .15, .20, .08, .07]
 _PRODUCT_RISK = dict(secured=-.6, express=.6, overdraft=.15, credit_line=0.0, seller_credit=.1, card=.45)
 MIN_REQUEST = 10_000.0  # минимальная сумма заявки, руб.
-NOISE = 2.0  # шум скрытой логики: Gini на реальной выборке ~0.57 (цель 0.55-0.65, как у реальных скоркарт МСБ)
+NOISE = 2.3  # шум скрытой логики (ручные веса): Gini на реальной выборке ~0.6 (цель 0.55-0.65, как у скоркарт МСБ)
 FEATURES = NUMERIC + CATEGORICAL
 CAP = 99.0  # отношения с нулевым знаменателем
 

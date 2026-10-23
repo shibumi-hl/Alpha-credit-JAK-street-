@@ -3,8 +3,9 @@
 
 Реальные: оборот, возраст, ОКВЭД, долговая нагрузка, покрытие, рост выручки, налоговый долг.
 Синтетика: просрочки БКИ, сезонность выручки, сумма и срок заявки, default_12m по скрытой логике.
-Веса реальных слагаемых скрытой логики - из config/synth_calibration.json (scripts/calibrate_synth.py, подобраны по
-банкротствам и исключениям из ЕГРЮЛ), если файл есть; полностью синтетическая выборка - всегда на ручных весах.
+Веса реальных слагаемых скрытой логики ручные; с --calibrated-weights - из config/synth_calibration.json
+(scripts/calibrate_synth.py, подбор по банкротствам и исключениям из ЕГРЮЛ). По умолчанию не применяется:
+банкротств, начавшихся после отчёта, в выборке 12 - подбор учит «закрытие фирмы», а не кредитный дефолт.
 
 Запуск из папки проекта (после load_fns_opendata.py и load_girbo.py):
   py scripts/build_scoring_sample.py                    # из data/fns/companies.csv
@@ -47,6 +48,8 @@ def main():
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--default-rate", type=float, default=0.05)
     ap.add_argument("--asof", type=date.fromisoformat, default=date.today())
+    ap.add_argument("--calibrated-weights", action="store_true",
+                    help="веса скрытой логики из config/synth_calibration.json (scripts/calibrate_synth.py)")
     ap.add_argument("--data-dir", type=Path, default=ROOT / "data")
     a = ap.parse_args()
     meta = {"built_at": date.today().isoformat(), "asof": a.asof.isoformat()}
@@ -57,7 +60,9 @@ def main():
     else:
         raw = pd.read_csv(a.data_dir / "fns" / "companies.csv", dtype={"inn": str, "okved": str}, encoding=ENC)
         check_known_before(raw, a.asof)
-        weights = synth.load_calibration()  # веса реальных слагаемых по ЕГРЮЛ (calibrate_synth.py), если есть
+        # веса реальных слагаемых по ЕГРЮЛ (calibrate_synth.py) - только по ключу: честных банкротств после отчёта
+        # пока мало (12), подбор учит «закрытие фирмы», а не кредитный дефолт
+        weights = synth.load_calibration(synth.CALIBRATION_PATH) if a.calibrated_weights else None
         df = synth.enrich(raw, a.seed, a.asof, a.default_rate, weights=weights)
         src = "ФНС + ГИР БО + синтетика, веса " + ("по реальной метке ЕГРЮЛ" if weights else "ручные")
         meta.update(source="real", weights="egrul" if weights else "manual")

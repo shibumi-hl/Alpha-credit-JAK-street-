@@ -180,3 +180,22 @@ def test_report_has_the_real_label_section_only_for_the_real_sample(tmp_path, mo
     tr.main()
     syn_report = next((tmp_path / "syn").glob("scorecard_*.md")).read_text(encoding="utf-8")
     assert "## Проверка на реальной метке" not in syn_report
+
+
+def test_calibrated_weights_are_opt_in(tmp_path, monkeypatch):
+    import numpy as np
+    build = _load("build_scoring_sample")
+    raw = synth.generate_real(500, np.random.default_rng(2), date(2026, 10, 23))
+    raw["bfo_date"], raw["debtam_date"] = "2026-03-20", None
+    (tmp_path / "fns").mkdir()
+    raw.to_csv(tmp_path / "fns" / "companies.csv", index=False, encoding="utf-8-sig")
+    cal = tmp_path / "cal.json"
+    cal.write_text(json.dumps({"weights": {"loss": 3.0}, "sector": {}}), encoding="utf-8")
+    monkeypatch.setattr(synth, "CALIBRATION_PATH", cal)
+    monkeypatch.setattr(sys, "argv", ["x", "--asof", "2026-10-23", "--data-dir", str(tmp_path)])
+    build.main()
+    meta = json.loads((tmp_path / "scoring" / "train_meta.json").read_text(encoding="utf-8"))
+    assert meta["weights"] == "manual"  # файл калибровки есть, но без ключа не применяется
+    monkeypatch.setattr(sys, "argv", ["x", "--asof", "2026-10-23", "--calibrated-weights", "--data-dir", str(tmp_path)])
+    build.main()
+    assert json.loads((tmp_path / "scoring" / "train_meta.json").read_text(encoding="utf-8"))["weights"] == "egrul"

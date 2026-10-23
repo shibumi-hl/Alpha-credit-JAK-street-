@@ -9,7 +9,7 @@ train_scorecard.py. Налоговый долг не подбирается (с�
 
 Запуск из папки проекта (после load_girbo.py и load_egrul.py):
   py scripts/calibrate_synth.py
-  py scripts/build_scoring_sample.py     # выборка из ФНС возьмёт подобранные веса
+  py scripts/build_scoring_sample.py --calibrated-weights   # выборка на подобранных весах (по умолчанию - ручные)
   py scripts/train_scorecard.py --capital-approach both
 
 Результат: config/synth_calibration.json (веса, отраслевые сдвиги, число событий, дата).
