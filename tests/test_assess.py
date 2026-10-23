@@ -148,3 +148,35 @@ def test_real_check_on_the_holdout_half(tmp_path):
     holdout_events = sum(1 for inn in df.inn[event] if half(inn) == HOLDOUT)
     assert rep["events"] == holdout_events
     assert rep["table"].iloc[0]["gini_full"] > 0.2
+
+
+def test_report_has_the_real_label_section_only_for_the_real_sample(tmp_path, monkeypatch):
+    import numpy as np
+    build, tr = _load("build_scoring_sample"), _load("train_scorecard")
+    raw = synth.generate_real(6000, np.random.default_rng(9), date(2026, 10, 23))
+    raw["bfo_date"] = "2026-03-20"
+    raw["debtam_date"] = None
+    rng = np.random.default_rng(9)
+    event = rng.random(len(raw)) < np.where(raw.ebit < 0, 0.10, 0.01)
+    raw["status"] = np.where(event, "INACTIVE", "ACTIVE")
+    (tmp_path / "fns").mkdir()
+    raw.to_csv(tmp_path / "fns" / "companies.csv", index=False, encoding="utf-8-sig")
+    eg = tmp_path / "raw" / "egrul"
+    eg.mkdir(parents=True)
+    for inn in raw.inn[event]:
+        (eg / f"{inn}.json").write_text(json.dumps({"inn": inn, "method": "Исключение юридического лица из ЕГРЮЛ",
+                                                    "end_date_pdf": "01.08.2026"}, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["x", "--asof", "2026-10-23", "--data-dir", str(tmp_path)])
+    build.main()
+    meta = json.loads((tmp_path / "scoring" / "train_meta.json").read_text(encoding="utf-8"))
+    assert meta["source"] == "real" and meta["weights"] in ("egrul", "manual")
+    monkeypatch.setattr(sys, "argv", ["x", "--data-dir", str(tmp_path), "--report-dir", str(tmp_path / "rep")])
+    tr.main()
+    real_report = next((tmp_path / "rep").glob("scorecard_*.md")).read_text(encoding="utf-8")
+    assert "## Проверка на реальной метке" in real_report
+    monkeypatch.setattr(sys, "argv", ["x", "--synthetic", "3000", "--data-dir", str(tmp_path)])
+    build.main()  # синтетика с теми же папками ФНС и ЕГРЮЛ рядом
+    monkeypatch.setattr(sys, "argv", ["x", "--data-dir", str(tmp_path), "--report-dir", str(tmp_path / "syn")])
+    tr.main()
+    syn_report = next((tmp_path / "syn").glob("scorecard_*.md")).read_text(encoding="utf-8")
+    assert "## Проверка на реальной метке" not in syn_report

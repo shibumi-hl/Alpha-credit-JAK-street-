@@ -74,3 +74,34 @@ def test_inactive_inns_from_companies(tmp_path):
     c = pd.DataFrame({"inn": ["1111111111", "2222222222", "3333333333"],
                       "status": ["ACTIVE", "INACTIVE", "LIQUIDATION_STAGE"]})
     assert le.inactive_inns(c) == ["2222222222", "3333333333"]
+
+
+class HtmlInsteadOfJson(FakeEgrul):
+    def request(self, method, url, data=None, timeout=None):
+        self.calls.append(url)
+        return Resp(None, content=b"<html>captcha</html>", ctype="text/html")
+
+
+class BrokenPdf(FakeEgrul):
+    pass
+
+
+def test_html_page_instead_of_json_stops_the_run(tmp_path):
+    s = HtmlInsteadOfJson()
+    got = le.collect([f"12345678{i:02d}" for i in range(10)], tmp_path, s)
+    assert got["stopped"] and len(s.calls) == 1
+
+
+def test_broken_pdf_is_a_failure_not_a_crash(tmp_path, monkeypatch):
+    def bad(_):
+        raise le.PdfError("broken")
+    monkeypatch.setattr(le, "pdf_text", bad)
+    got = le.collect(["1234567890"], tmp_path, FakeEgrul())
+    assert got["failed"] == 1 and got["stopped"] is None and not list(tmp_path.glob("*.json"))
+
+
+def test_consecutive_failures_stop_and_bad_inn_is_skipped(tmp_path, monkeypatch):
+    monkeypatch.setattr(le, "pdf_text", lambda b: (_ for _ in ()).throw(le.PdfError("broken")))
+    got = le.collect(["..\\evil", *["1234567890"] * 9], tmp_path, FakeEgrul())  # сбой не кэшируется - повтор доходит до PDF
+    assert got["failed"] == le.MAX_FAILURES + 1 and got["stopped"]  # плохой ИНН + 5 сбоев подряд
+    assert not (tmp_path.parent / "evil.json").exists()

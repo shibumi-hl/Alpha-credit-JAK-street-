@@ -45,6 +45,9 @@ def main():
     label = real_label(raw, a.data_dir / "raw" / "egrul")
     label = label[label["half"] == CALIBRATION]
     part = raw.merge(label[["inn", "event", "kind"]], on="inn")
+    if part.event.sum() == 0:
+        sys.exit("в половине «калибровка» нет событий (банкротств или исключений после отчёта) - "
+                 "сначала соберите ЕГРЮЛ: py scripts/load_egrul.py")
     f = synth.features(part, a.asof)
     sw = (part.kind == BANKRUPTCY).map({True: a.bankruptcy_weight, False: 1.0}).to_numpy()
     res = fit_weights(synth.real_terms(f), f.okved_section, part.event, c=a.c, sample_weight=sw)

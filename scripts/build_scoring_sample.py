@@ -13,6 +13,7 @@
 Результат: data/scoring/train.csv
 """
 import argparse
+import json
 import sys
 from datetime import date
 from pathlib import Path
@@ -48,18 +49,22 @@ def main():
     ap.add_argument("--asof", type=date.fromisoformat, default=date.today())
     ap.add_argument("--data-dir", type=Path, default=ROOT / "data")
     a = ap.parse_args()
+    meta = {"built_at": date.today().isoformat(), "asof": a.asof.isoformat()}
     if a.synthetic:
         df = synth.generate(a.synthetic, a.seed, a.asof, a.default_rate)
         src = "синтетика"
+        meta.update(source="synthetic", weights="manual")
     else:
         raw = pd.read_csv(a.data_dir / "fns" / "companies.csv", dtype={"inn": str, "okved": str}, encoding=ENC)
         check_known_before(raw, a.asof)
         weights = synth.load_calibration()  # веса реальных слагаемых по ЕГРЮЛ (calibrate_synth.py), если есть
         df = synth.enrich(raw, a.seed, a.asof, a.default_rate, weights=weights)
         src = "ФНС + ГИР БО + синтетика, веса " + ("по реальной метке ЕГРЮЛ" if weights else "ручные")
+        meta.update(source="real", weights="egrul" if weights else "manual")
     out = a.data_dir / "scoring" / "train.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out, index=False, encoding=ENC)
+    (out.parent / "train_meta.json").write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")  # для отчёта
     print(f"{src}: {len(df):,} компаний, дефолтов {df.default_12m.sum():,} ({df.default_12m.mean():.1%}) → {out}")
 
 

@@ -159,8 +159,17 @@ def load_calibration(path: Path = CALIBRATION_PATH) -> dict | None:
     """Веса из калибровки по реальной метке или None, если файла нет."""
     if not Path(path).exists():
         return None
-    cal = json.loads(Path(path).read_text(encoding="utf-8"))
-    return {**DEFAULT_WEIGHTS, **cal["weights"], "sector": cal.get("sector", DEFAULT_WEIGHTS["sector"])}
+    try:
+        cal = json.loads(Path(path).read_text(encoding="utf-8"))
+    except ValueError as e:
+        raise ValueError(f"{path}: файл калибровки не JSON ({e})") from e
+    weights, sector = cal.get("weights") if isinstance(cal, dict) else None, None
+    if isinstance(cal, dict):
+        sector = cal.get("sector", DEFAULT_WEIGHTS["sector"])
+    numeric = lambda d: isinstance(d, dict) and all(isinstance(v, (int, float)) for v in d.values())  # noqa: E731
+    if not numeric(weights) or set(weights) - set(DEFAULT_WEIGHTS) or not numeric(sector):
+        raise ValueError(f"{path}: нужны словари чисел weights (ключи {sorted(DEFAULT_WEIGHTS)}) и sector")
+    return {**DEFAULT_WEIGHTS, **weights, "sector": sector}
 
 
 def _real_part(f: pd.DataFrame, weights: dict) -> np.ndarray:

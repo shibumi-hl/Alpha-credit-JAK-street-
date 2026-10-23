@@ -31,7 +31,6 @@ from scoring.assess import OUTCOMES  # noqa: E402
 from scoring.credit import ELIGIBILITY, STOPS  # noqa: E402
 from scoring.pricing import load_pricing  # noqa: E402
 from scoring.realcheck import validate as validate_real, real_label  # noqa: E402
-from scoring.synth import load_calibration  # noqa: E402
 from scoring.reasons import CATEGORIES  # noqa: E402
 from scoring.whatif import Engine  # noqa: E402
 
@@ -76,16 +75,22 @@ def capital_note(capital: dict) -> tuple[str, str]:
 def real_check(df: pd.DataFrame, model, data_dir: Path, n_boot: int = 1000) -> dict | None:
     """Проверка PD-скоркарты на реальной метке ЕГРЮЛ (отложенная половина) или None, если данных ЕГРЮЛ нет."""
     egrul, comp = data_dir / "raw" / "egrul", data_dir / "fns" / "companies.csv"
-    if not egrul.is_dir() or not comp.exists():
+    meta_path = data_dir / "scoring" / "train_meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+    if not egrul.is_dir() or not comp.exists() or meta.get("source") == "synthetic":
         return None
     companies = pd.read_csv(comp, dtype={"inn": str}, encoding=ENC, usecols=["inn", "status", "bfo_date"])
     label = real_label(companies, egrul)
-    if label.event.sum() == 0:
+    label = label[label.inn.isin(df.inn)]
+    if label.empty or label.event.sum() == 0:  # выборка не из этих компаний (например, синтетика) - раздела нет
         return None
     scored = pd.concat([df[["inn", "debt"]].reset_index(drop=True) if "debt" in df else
                         df[["inn"]].assign(debt=0.0).reset_index(drop=True),
                         model.score(df).reset_index(drop=True)], axis=1)
-    return validate_real(scored, label, n_boot=n_boot)
+    res = validate_real(scored, label, n_boot=n_boot)
+    res["weights"] = {"egrul": "по реальной метке ЕГРЮЛ (половина «калибровка»)", "manual": "ручные"}.get(
+        meta.get("weights"), "неизвестно (выборка собрана до записи train_meta.json)")
+    return res
 
 
 def _real_section(real: dict | None) -> list:
@@ -99,12 +104,14 @@ def _real_section(real: dict | None) -> list:
     view = pd.DataFrame({"событие": t["событие"], "компании": t["компании"], "событий": t["events"], "n": t["n"],
                          "Gini полного балла": [ci(*r) for r in t[["gini_full", "full_lo", "full_hi"]].to_numpy()],
                          "Gini реальных факторов": [ci(*r) for r in t[["gini_real", "real_lo", "real_hi"]].to_numpy()]})
-    weights = "по реальной метке ЕГРЮЛ (половина «калибровка»)" if load_calibration() else "ручные"
+    weights = real.get("weights", "неизвестно")
     return ["## Проверка на реальной метке (ЕГРЮЛ, отложенная половина)", "",
             "Событие - банкротство или исключение налоговой после подачи отчёта; контроль - действующие компании; "
             "ликвидации и реорганизации не учитываются. Считается только на половине «проверка» (по хэшу ИНН), "
             f"не участвовавшей в подборе весов скрытой логики. Веса реальных слагаемых: {weights}. Реальные факторы: "
-            f"{', '.join(real['real_factors'])} (без налогового долга). В скобках - 95% бутстреп-интервал.", "",
+            f"{', '.join(real['real_factors'])} (без налогового долга). В скобках - 95% бутстреп-интервал. "
+            "Оговорка: перевес банкротств ×5 выбирался по весам калибровочной половины, но результат проверки на этой "
+            "половине при выборе уже был виден.", "",
             _md(view), "", "### Доля событий по классам риска (отложенная половина)", "", _md(real["classes"]), ""]
 
 

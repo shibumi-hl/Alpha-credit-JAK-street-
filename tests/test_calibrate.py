@@ -101,3 +101,27 @@ def test_sample_weights_shift_the_fit_towards_upweighted_events():
     heavy = fit_weights(X, sec, y, c=10.0, sample_weight=np.where(a, 5.0, 1.0))["weights"]
     assert heavy["weak_eq"] > plain["weak_eq"] + 0.3
     assert heavy["small"] < plain["small"]
+
+
+@pytest.mark.parametrize("content", ["{bad", '{"sector": {}}', '{"weights": {}, "sector": null}', '{"weights": []}'])
+def test_broken_calibration_file_is_a_clear_error(tmp_path, content):
+    p = tmp_path / "cal.json"
+    p.write_text(content, encoding="utf-8")
+    with pytest.raises(ValueError, match="cal.json"):
+        synth.load_calibration(p)
+
+
+def test_script_without_events_exits_with_a_message(tmp_path, monkeypatch):
+    import importlib.util
+    import sys
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location("cal2", Path(__file__).resolve().parents[1] / "scripts" / "calibrate_synth.py")
+    cal = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cal)
+    raw = synth.generate_real(200, np.random.default_rng(6), ASOF).assign(bfo_date="2026-03-20", status="ACTIVE")
+    (tmp_path / "fns").mkdir()
+    raw.to_csv(tmp_path / "fns" / "companies.csv", index=False, encoding="utf-8-sig")
+    (tmp_path / "raw" / "egrul").mkdir(parents=True)
+    monkeypatch.setattr(sys, "argv", ["x", "--data-dir", str(tmp_path), "--out", str(tmp_path / "c.json")])
+    with pytest.raises(SystemExit, match="событий"):
+        cal.main()

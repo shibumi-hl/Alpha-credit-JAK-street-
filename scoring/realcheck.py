@@ -8,6 +8,7 @@
 """
 import hashlib
 import json
+from datetime import date, datetime
 from pathlib import Path
 
 import numpy as np
@@ -26,22 +27,44 @@ def half(inn: str) -> str:
     return HOLDOUT if hashlib.md5(str(inn).encode()).digest()[0] % 2 else CALIBRATION
 
 
+def _date(x) -> date | None:
+    """Дата отчёта: ISO или ДД.ММ.ГГГГ; пусто или мусор - None."""
+    s = "" if x is None or x != x else str(x).strip()
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(s[:10], fmt).date()
+        except ValueError:
+            pass
+    return None
+
+
 def real_label(companies: pd.DataFrame, egrul_dir: Path) -> pd.DataFrame:
-    """inn, kind (active | bankruptcy | struck_off), event 0/1, half - только пригодные для проверки строки."""
-    rows = []
+    """inn, kind (active | bankruptcy | struck_off), event 0/1, half - только пригодные для проверки строки.
+    attrs["skipped"] - сколько недействующих не вошло: нет даты отчёта, нечитаемый файл, нет выписки."""
+    rows, skipped = [], {"no_report_date": 0, "unreadable": 0, "no_extract": 0}
     for c in companies.itertuples():
         if c.status == "ACTIVE":
             rows.append((c.inn, "active", 0))
             continue
+        report = _date(c.bfo_date)
+        if report is None:
+            skipped["no_report_date"] += 1
+            continue
         path = Path(egrul_dir) / f"{c.inn}.json"
         if not path.exists():
+            skipped["no_extract"] += 1
             continue
-        rec = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            rec = json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            skipped["unreadable"] += 1
+            continue
         k, d = kind(rec), event_date(rec)
-        if k in DISTRESS and d and d > str(c.bfo_date):
+        if k in DISTRESS and d and d > report.isoformat():
             rows.append((c.inn, k, 1))
     out = pd.DataFrame(rows, columns=["inn", "kind", "event"])
     out["half"] = out.inn.map(half)
+    out.attrs["skipped"] = skipped
     return out
 
 

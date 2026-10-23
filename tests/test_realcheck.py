@@ -75,3 +75,17 @@ def test_validate_uses_only_the_holdout_half():
     assert first["events"] == hold.event.sum()
     assert first["gini_full"] > 0.5 and first["gini_real"] > 0.5
     assert rep["classes"]["n"].sum() == len(hold)
+
+
+def test_report_dates_are_parsed_and_broken_files_are_skipped(tmp_path):
+    d = tmp_path / "eg"
+    d.mkdir()
+    _write(d, "3000000001", method="Исключение юридического лица из ЕГРЮЛ", end_date_pdf="14.10.2026")
+    _write(d, "3000000002", method="Исключение юридического лица из ЕГРЮЛ", end_date_pdf="14.10.2026")
+    (d / "3000000003.json").write_text("", encoding="utf-8")  # битый файл
+    c = pd.DataFrame({"inn": ["3000000001", "3000000002", "3000000003", "3000000004"],
+                      "status": ["INACTIVE", "INACTIVE", "INACTIVE", "INACTIVE"],
+                      "bfo_date": ["30.03.2026", None, "2026-03-20", "2026-03-20"]})
+    lab = real_label(c, d)
+    assert list(lab.inn) == ["3000000001"]  # дата отчёта в формате ДД.ММ.ГГГГ понята; без даты - вне выборки
+    assert lab.attrs["skipped"] == {"no_report_date": 1, "unreadable": 1, "no_extract": 1}

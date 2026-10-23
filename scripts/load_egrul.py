@@ -13,6 +13,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -23,10 +24,11 @@ import requests
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from scoring.egrul import parse_extract, pdf_text, role  # noqa: E402
+from scoring.egrul import PdfError, parse_extract, pdf_text, role  # noqa: E402
 
 BASE = "https://egrul.nalog.ru"
 PAUSE = 3.0
+MAX_FAILURES = 5  # подряд - сервис, похоже, отказывает: останавливаемся
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36"
 
 
@@ -42,18 +44,29 @@ def _get(s, path, method="GET", data=None):
     return r
 
 
+def _json(r) -> dict:
+    """Ответ сервиса как словарь; HTML (капча, страница ошибки) или неожиданный JSON - остановка."""
+    try:
+        js = r.json()
+    except ValueError:
+        js = None
+    if not isinstance(js, dict):
+        raise Stop("ответ не JSON-объект - возможно, капча или страница ошибки")
+    return js
+
+
 def one(s, inn: str) -> dict:
-    js = _get(s, "/", "POST", {"query": inn, "region": "", "PreventChromeAutocomplete": ""}).json()
+    js = _json(_get(s, "/", "POST", {"query": inn, "region": "", "PreventChromeAutocomplete": ""}))
     if js.get("captchaRequired"):
         raise Stop("ЕГРЮЛ просит капчу")
-    rows = _get(s, f"/search-result/{js['t']}").json().get("rows") or []
+    rows = _json(_get(s, f"/search-result/{js['t']}")).get("rows") or []
     row = next((r for r in rows if r.get("i") == inn), None)
     if row is None:
         return {"inn": inn, "found": False}
     rec = {"inn": inn, "found": True, "role": role(row.get("g")), "reg_date": row.get("r"), "end_date": row.get("e")}
     _get(s, f"/vyp-request/{row['t']}")
     for _ in range(10):
-        if _get(s, f"/vyp-status/{row['t']}").json().get("status") == "ready":
+        if _json(_get(s, f"/vyp-status/{row['t']}")).get("status") == "ready":
             break
     else:
         raise Stop("выписка не готова")
@@ -71,7 +84,12 @@ def inactive_inns(companies: pd.DataFrame) -> list:
 def collect(inns, out: Path, s) -> dict:
     out.mkdir(parents=True, exist_ok=True)
     got = {"done": 0, "cached": 0, "failed": 0, "stopped": None}
+    streak = 0
     for inn in inns:
+        if not re.fullmatch(r"\d{10}", str(inn)):  # ИНН юрлица - 10 цифр; иначе это не ЮЛ (и не путь к файлу)
+            got["failed"] += 1
+            print(f"  пропуск: не ИНН юрлица {inn!r}", flush=True)
+            continue
         path = out / f"{inn}.json"
         if path.exists():
             got["cached"] += 1
@@ -81,10 +99,15 @@ def collect(inns, out: Path, s) -> dict:
         except Stop as e:
             got["stopped"] = f"{inn}: {e}"
             break
-        except (requests.RequestException, ValueError, KeyError) as e:
+        except (requests.RequestException, PdfError, ValueError, KeyError) as e:
             got["failed"] += 1
+            streak += 1
             print(f"  {inn}: {e}", flush=True)
+            if streak >= MAX_FAILURES:
+                got["stopped"] = f"{MAX_FAILURES} сбоев подряд, последний на {inn}: {e}"
+                break
             continue
+        streak = 0
         tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
         os.replace(tmp, path)
