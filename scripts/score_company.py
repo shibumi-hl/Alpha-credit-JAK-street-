@@ -18,6 +18,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from scoring.approval import LABELS  # noqa: E402
 from scoring.whatif import Engine, evaluate, whatif  # noqa: E402
 
 ENC = "utf-8-sig"
@@ -35,7 +36,9 @@ def pp(x):
 
 def print_text(r: dict, scenarios=None):
     print(f"ИНН {r['inn']}: PD {r['pd']:.2%}, класс риска {r['risk_class']} (балл {r['score']:.0f})")
-    print(f"Шанс одобрения: {r['approval_probability']:.0%} (балл одобрения {r['approval_score']:.0f})")
+    soft = "" if r["approval_mode"] == "full" else \
+        f"; предоценка - нет данных: {', '.join(LABELS[f] for f in r['approval_imputed'])}"
+    print(f"Шанс одобрения: {r['approval_probability']:.0%} (балл одобрения {r['approval_score']:.0f}{soft})")
     for x in r["approval_explain"]:
         if abs(x["баллы"]) >= 0.5:
             print(f"  {x['признак']}: {x['категория']} {x['баллы']:+.0f}")

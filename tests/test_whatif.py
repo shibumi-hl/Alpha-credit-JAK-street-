@@ -1,10 +1,12 @@
 import json
 import warnings
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
 import pytest
 
+from scoring.approval import ApprovalModel, approval_target
 from scoring.gcurve import CurveStore
 from scoring import synth
 from scoring.whatif import SCENARIOS, Engine, evaluate, whatif
@@ -33,6 +35,8 @@ def test_fit_reports_both_models_and_chains_price_into_decisions(eng):
     priced = assessed[assessed.offered_amount > 0]
     assert (priced.all_in >= priced.rate - 1e-9).all() and priced.rate.between(0.05, 0.6).all()
     assert (assessed.loc[assessed.stop_codes.str.len() > 0, "approval_probability"] == 0).all()
+    appr = rep["approval"]
+    assert appr["n_train"] + appr["n_test"] == rep["approval_n"] and appr["gini_test"] > appr["gini_test_categories"]
 
 
 def test_evaluate_is_json_ready_and_complete(eng):
@@ -71,6 +75,33 @@ def test_stop_factor_means_zero_chance_and_reason(eng):
     r = evaluate(engine, _app(df, bki_current_dpd=60))
     assert r["outcome"] == "REJECT" and r["approval_probability"] == 0
     assert r["stop_factors"][0]["code"] == "S01"
+
+
+def test_soft_mode_without_credit_history(eng):
+    df, engine, _ = eng
+    full = evaluate(engine, _app(df))
+    assert full["approval_mode"] == "full" and full["approval_imputed"] == []
+    r = evaluate(engine, _app(df, bki_max_dpd_12m=None, bki_current_dpd=None, bki_overdue_cnt_12m=None))
+    assert r["outcome"] == "REQUEST_INFO"  # решение ждёт согласия на БКИ, а предоценка шанса уже есть
+    assert r["approval_mode"] == "soft" and r["approval_imputed"] == ["bki_overdue"]
+    assert 0 < r["approval_probability"] < 1
+
+
+def test_scenarios_never_lower_the_chance_even_if_decisions_suggest_it(eng):
+    df, engine, rep = eng
+    out = rep["assessed"]
+    y = approval_target(out, df.requested_amount)
+    perks = (df.marketplace == 1) | (df.has_rko == 1) | (df.guarantee == 1) | (df["product"] == "secured")
+    y_adv = y.where(~perks, 0.0).where(y.notna())  # решения, где клиентам с «плюсами» якобы чаще отказывают
+    adv = replace(engine, approval=ApprovalModel.fit(df.assign(pd=out.pd.to_numpy()), y_adv))
+    keys = ["marketplace", "rko_turnover", "guarantee", "collateral"]
+    rows = df[(df.okved_section == "G") & (df.marketplace == 0) & (df.has_rko == 0)].head(25)
+    deltas = {k: [] for k in keys}
+    for _, a in rows.iterrows():
+        for s in whatif(adv, {**a.to_dict(), "bki_current_dpd": 0, "status": "ACTIVE"}, scenarios=keys)["scenarios"]:
+            deltas[s["key"]].append(s["delta_approval_pp"])
+    assert all(deltas.values())
+    assert min(min(v) for v in deltas.values()) >= -1e-9
 
 
 

@@ -2,7 +2,8 @@
 Обучение моделей скоринга МСБ на data/scoring/train.csv и отчёт.
 
 Модель 1a - PD-скоркарта OptBinning (риск дефолта). Кредитная логика со ставкой модели 2 даёт решения,
-на них учится модель 1b - вероятность одобрения (one-hot логистическая, баллы по категориям).
+на них учится модель 1b - вероятность одобрения (логит с ограничениями знаков на категориях заявки, PD и
+денежном потоке; 70% решений на обучение, метрики на отложенных 30%).
 Модель 2 - risk-based pricing: фондирование по G-кривой Мосбиржи (data/raw/gcurve_params.csv, на D-1)
 + PD × LGD + капитал + расходы + маржа − скидки, и ПСК с комиссией и страховкой.
 
@@ -26,6 +27,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from scoring.approval import REF_RATE  # noqa: E402
 from scoring.gcurve import CurveStore  # noqa: E402
 from scoring.assess import OUTCOMES  # noqa: E402
 from scoring.credit import ELIGIBILITY, STOPS  # noqa: E402
@@ -129,6 +131,7 @@ def write_report(path: Path, fit: dict, src: str, capital: dict, real: dict | No
     t = rep["table"].copy()
     t["Bin"] = t["Bin"].astype(str)
     at = fit["approval_table"].copy()
+    ar = fit["approval"]
     lines = [
         f"# Скоринг МСБ - {date.today().isoformat()}, {title}", "",
         f"Выборка: {src}; train {rep['n_train']:,} / test {rep['n_test']:,}, "
@@ -140,9 +143,20 @@ def write_report(path: Path, fit: dict, src: str, capital: dict, real: dict | No
         f"- Факторов в модели: {len(rep['factors'])} - {', '.join(rep['factors'])}", "",
         "### Классы риска (test)", "", _md(rep["classes"]), "",
         "## Модель 1b: вероятность одобрения (политика)", "",
-        f"Обучена на {fit['approval_n']:,} решениях без дозапросов и стоп-факторов, доля одобренных "
-        f"{fit['approval_rate']:.1%}. Балл = 600 + (20/ln2)·logit(p); +20 баллов - вдвое выше шансы.", "",
-        _md(at, ".3f"), "",
+        f"Решений без дозапросов и стоп-факторов {fit['approval_n']:,}, доля одобренных {fit['approval_rate']:.1%}; "
+        f"обучение на {ar['n_train']:,} (70%), проверка на отложенных {ar['n_test']:,} (30%, стратифицировано). "
+        "Признаки: категории заявки, PD скоркарты, запас денежного потока = (EBIT / min DSCR − обслуживание долга) / "
+        f"годовой платёж и ln(оборот / платёж); платёж - аннуитет по опорной ставке {REF_RATE:.1%}. Знаки ограничены "
+        "смыслом (залог, РКО, обороты в банке, маркетплейс, гарантия и денежный поток не снижают шанс; PD, сумма, "
+        "просрочки и молодость бизнеса не повышают), упорядоченные категории монотонны; «ограничение знака» - "
+        "данные тянули против смысла, эффект обнулён. Нет признака (нет БКИ, отчётности) - средний вклад по "
+        "обучению (soft-режим). Балл = 600 + (20/ln2)·logit(p); +20 баллов - вдвое выше шансы.", "",
+        f"- Gini train {ar['gini_train']:.3f}, test {ar['gini_test']:.3f}; только категории заявки (без PD и "
+        f"денежного потока) - test {ar['gini_test_categories']:.3f}",
+        f"- Brier test {ar['brier_test']:.3f} (константа {ar['brier_const']:.3f}), LogLoss test {ar['logloss_test']:.3f}; "
+        f"средний прогноз {ar['mean_p_test']:.1%} при доле одобренных {ar['rate_test']:.1%}", "",
+        "### Калибровка по классам риска (test)", "", _md(ar["classes"], ".3f"), "",
+        "### Баллы одобрения", "", _md(at, ".3f"), "",
         "## Модель 2: ставка (risk-based pricing), % годовых, среднее по предложениям", "",
         "ставка = фондирование + EL + капитал + расходы + маржа − скидки; ПСК - с комиссией и страховкой; " + formula, "",
         _md(pricing_by_class(out), ".2f"), "",
@@ -180,7 +194,7 @@ def run(df: pd.DataFrame, pricing: dict, a, src: str) -> Path:
     write_report(rp, fit, src, pricing["capital"], real_check(df, engine.scorecard, a.data_dir))
     rep = fit["scorecard"]
     print(f"[{approach}] PD: Gini test {rep['gini_test']:.3f}, KS {rep['ks_test']:.3f}, факторов {len(rep['factors'])}; "
-          f"одобрение: {fit['approval_n']:,} решений; средняя ставка {out.rate.mean():.1%}, ПСК {out.all_in.mean():.1%}; "
+          f"одобрение: {fit['approval_n']:,} решений, Gini test {fit['approval']['gini_test']:.3f}; средняя ставка {out.rate.mean():.1%}, ПСК {out.all_in.mean():.1%}; "
           f"исходы: {out.outcome.value_counts().to_dict()} → {rp}")
     return rp
 

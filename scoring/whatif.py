@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from scoring.approval import ApprovalModel, approval_target
+from scoring.approval import ApprovalModel, approval_target, train_approval
 from scoring.assess import assess
 from scoring.credit import _num, load_policy, validate
 from scoring.pricing import load_pricing
@@ -100,10 +100,11 @@ class Engine:
         model, rep = train(df, seed=seed)
         out = assess(df, model, policy, pricing=pricing, curves=curves, asof=asof)
         y = approval_target(out, df.requested_amount)
-        appr = ApprovalModel.fit(df, y)
-        out["approval_probability"] = appr.predict(df, stopped=(out.stop_codes.str.len() > 0).to_numpy())
+        scored = df.assign(pd=out.pd.to_numpy())  # PD скоркарты - вход модели одобрения
+        appr, appr_rep = train_approval(scored, y, groups=out.risk_class, seed=seed, min_dscr=policy["min_dscr"])
+        out["approval_probability"] = appr.predict(scored, stopped=(out.stop_codes.str.len() > 0).to_numpy())
         eng = cls(model, appr, policy, pricing, curves, asof)
-        return eng, {"scorecard": rep, "assessed": out, "approval_table": appr.points_table(),
+        return eng, {"scorecard": rep, "approval": appr_rep, "assessed": out, "approval_table": appr.points_table(),
                      "approval_n": int(y.notna().sum()), "approval_rate": float(y.mean())}
 
     def save(self, path: Path):
@@ -123,11 +124,14 @@ def evaluate(engine: Engine, app: dict) -> dict:
     r = assess(df, engine.scorecard, engine.policy, pricing=engine.pricing, curves=engine.curves,
                asof=engine.asof).iloc[0]
     stopped = len(r.stop_codes) > 0
+    scored = df.assign(pd=r.pd)
+    imputed = engine.approval.imputed(scored)[0]  # soft-режим: чего не хватило, заменено средним
     return _py({
         "inn": a.get("inn"), "score": r.score, "pd": r.pd, "risk_class": r.risk_class,
-        "approval_probability": float(engine.approval.predict(df, stopped=[stopped])[0]),
-        "approval_score": float(engine.approval.score(df)[0]),
-        "approval_explain": engine.approval.explain(a)[:5],
+        "approval_probability": float(engine.approval.predict(scored, stopped=[stopped])[0]),
+        "approval_score": float(engine.approval.score(scored)[0]),
+        "approval_explain": engine.approval.explain(scored.iloc[0])[:5],
+        "approval_mode": "soft" if imputed else "full", "approval_imputed": imputed,
         "outcome": r.outcome, "product": r["product"], "offered_product": r.offered_product,
         "requested_amount": a["requested_amount"], "offered_amount": r.offered_amount, "limit": r.limit,
         "route": r.route, "pricing": r.pricing, "stop_factors": r.stop_factors, "reasons": r.reasons,
