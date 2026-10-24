@@ -80,7 +80,10 @@ def main():
     ap.add_argument("--data-dir", type=Path, default=ROOT / "data")
     a = ap.parse_args()
     sys.stdout.reconfigure(errors="replace")  # в файл/пайп Windows пишет cp1251: «−», «→», «≥» не должны ронять вывод
-    engine = Engine.load(a.data_dir / "scoring" / "engine.pkl")
+    try:
+        engine = Engine.load(a.data_dir / "scoring" / "engine.pkl")
+    except ValueError as e:  # модели от прошлой версии кода
+        sys.exit(str(e))
     if a.inn:
         df = pd.read_csv(a.data_dir / "scoring" / "train.csv", dtype={"inn": str, "okved": str}, encoding=ENC)
         df = df[df.inn == a.inn]

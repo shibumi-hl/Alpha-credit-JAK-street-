@@ -3,6 +3,7 @@ import warnings
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -85,6 +86,14 @@ def test_soft_mode_without_credit_history(eng):
     assert r["outcome"] == "REQUEST_INFO"  # решение ждёт согласия на БКИ, а предоценка шанса уже есть
     assert r["approval_mode"] == "soft" and r["approval_imputed"] == ["bki_overdue"]
     assert 0 < r["approval_probability"] < 1
+
+
+def test_engine_saved_before_this_model_is_refused_with_a_clear_message(eng, tmp_path):
+    _, engine, _ = eng
+    old = replace(engine, approval=SimpleNamespace(columns=[], intercept=0.0, coef={}, counts={}))  # поля старой модели
+    old.save(tmp_path / "engine.pkl")
+    with pytest.raises(ValueError, match="train_scorecard"):
+        Engine.load(tmp_path / "engine.pkl")
 
 
 def test_scenarios_never_lower_the_chance_even_if_decisions_suggest_it(eng):

@@ -8,7 +8,7 @@ import pytest
 
 from scoring import synth
 from scoring.approval import (BASE, CATEGORIES, CONTINUOUS, FACTOR, LABELS, SIGNS, ApprovalModel, approval_target,
-                              bin_application, train_approval)
+                              bin_application, cash_flow, train_approval)
 from scoring.assess import assess
 from scoring.credit import load_policy
 from scoring.scorecard import train
@@ -135,6 +135,49 @@ def test_soft_mode_imputes_missing_inputs_neutrally(fitted):
     assert m.logit(soft)[0] == pytest.approx(m.logit(variants).mean())
     shown = {x["признак"]: x["категория"] for x in m.explain(soft.iloc[0])}
     assert shown[LABELS["bki_overdue"]] == "нет данных" and shown[LABELS["logit_pd"]] == "нет данных"
+
+
+def test_cash_flow_multiples_match_a_hand_calculation():
+    # 1,2 млн на 12 мес. под 22,5%: аннуитет 112 602,22 руб. в месяц
+    app = pd.DataFrame({"revenue": [12e6], "ebit": [2.5e6], "debt_service": [0.5e6], "requested_amount": [1.2e6],
+                        "requested_term_m": [12], "pd": [0.02]})
+    cf = cash_flow(app).iloc[0]
+    assert cf.cover == pytest.approx((2.5e6 / 1.25 - 0.5e6) / (12 * 112_602.22), rel=1e-6)  # 1,11× годового платежа
+    assert cf.turnover == pytest.approx(1e6 / 112_602.22, rel=1e-6)  # 8,88× месячного платежа
+    assert cf["pd"] == 0.02
+
+
+def test_infinite_inputs_count_as_missing(fitted):
+    df, _, _, m, _ = fitted
+    row = df.iloc[[0]]
+    inf = row.assign(ebit=np.inf, bki_max_dpd_12m=np.inf)  # как в кредитной логике: бесконечность - не число
+    assert m.imputed(inf) == [["bki_overdue", "cash_cover"]]
+    assert m.predict(inf)[0] == pytest.approx(m.predict(row.assign(ebit=np.nan, bki_max_dpd_12m=np.nan))[0])
+
+
+def test_zero_or_negative_revenue_is_the_worst_case_not_missing(fitted):
+    df, _, _, m, _ = fitted
+    row = df.iloc[[0]]
+    amount = float(row.requested_amount.iloc[0])
+
+    def app(rev):
+        return row.assign(revenue=rev, amount_to_revenue=amount / rev if rev > 0 else np.nan)
+
+    assert m.imputed(app(0.0)) == [[]] and m.imputed(app(-5e6)) == [[]]
+    assert bin_application(app(0.0)).amount_share.iloc[0] == ">30%"
+    assert m.predict(app(0.0))[0] <= m.predict(app(1.0))[0]
+    assert m.predict(app(-5e6))[0] <= m.predict(app(1.0))[0]
+
+
+def test_too_few_decisions_raise_a_clear_error(fitted):
+    df = fitted[0]
+    y = pd.Series(np.nan, index=df.index)
+    y.iloc[:200] = 1.0
+    with pytest.raises(ValueError, match="одобрений и .* отказов"):
+        train_approval(df, y)
+    y.iloc[:3] = 0.0
+    with pytest.raises(ValueError, match="одобрений и .* отказов"):
+        train_approval(df, y)
 
 
 def test_points_and_score_follow_the_pdo_scale(fitted):

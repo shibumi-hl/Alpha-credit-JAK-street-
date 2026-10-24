@@ -115,7 +115,10 @@ class Engine:
     @staticmethod
     def load(path: Path) -> "Engine":
         with open(path, "rb") as f:
-            return pickle.load(f)
+            eng = pickle.load(f)
+        if not hasattr(eng.approval, "steps"):  # модель одобрения до PD и денежного потока
+            raise ValueError(f"{path}: модели обучены прошлой версией кода - переобучите: py scripts/train_scorecard.py")
+        return eng
 
 
 def evaluate(engine: Engine, app: dict) -> dict:

@@ -68,6 +68,15 @@ def test_scripts_end_to_end_on_synthetic(tmp_path, monkeypatch, capsys):
     res = json.loads(capsys.readouterr().out)
     assert res["base"]["outcome"] in OUTCOMES and res["scenarios"]
     assert all("delta_approval_pp" in s for s in res["scenarios"])
+    assert res["base"]["approval_mode"] == "full" and res["base"]["approval_imputed"] == []
+    no_bki = tmp_path / "no_bki.json"  # заявка без кредитной истории - предоценка шанса в soft-режиме
+    row = {k: v for k, v in sample.iloc[1].to_dict().items() if not k.startswith("bki_")}
+    no_bki.write_text(json.dumps(row, default=str), encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["x", "--json", str(no_bki), "--format", "json", "--data-dir", str(tmp_path)])
+    sc.main()
+    soft = json.loads(capsys.readouterr().out)["base"]
+    assert soft["outcome"] == "REQUEST_INFO" and soft["approval_mode"] == "soft"
+    assert soft["approval_imputed"] == ["bki_overdue"] and 0 < soft["approval_probability"] < 1
     script = str(SCRIPTS / "score_company.py")
     env = {**os.environ, "PYTHONIOENCODING": "cp1251"}  # вывод в файл/пайп в кодировке Windows по умолчанию
     run = subprocess.run([sys.executable, script, "--inn", sample.inn.iloc[1], "--whatif", "--data-dir", str(tmp_path)],

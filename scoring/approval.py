@@ -67,14 +67,21 @@ LABELS = {"product": "Продукт", "business_age": "Возраст бизн�
 NO_DATA = "нет данных"
 
 
+def _finite(df: pd.DataFrame, col: str) -> pd.Series:
+    """Число или NaN: пусто, не число и ±inf - нет данных (как credit._num)."""
+    x = pd.to_numeric(df[col], errors="coerce") if col in df else pd.Series(np.nan, index=df.index)
+    return x.astype(float).replace([np.inf, -np.inf], np.nan)
+
+
 def bin_application(df: pd.DataFrame) -> pd.DataFrame:
-    """Категории заявки; неизвестный возраст, доля суммы или БКИ - пусто (NaN), флаги без значения - «нет»."""
+    """Категории заявки; неизвестный возраст, доля суммы или БКИ - пусто (NaN), флаги без значения - «нет».
+    Выручка ≤ 0 известна и хуже любой доли: сумма - больше 30% выручки."""
     yes = lambda s: np.where(pd.Series(s).fillna(0).astype(float) > 0, "да", "нет")  # noqa: E731
     known = lambda v, x: pd.Series(v, index=df.index).where(x.notna().to_numpy())  # noqa: E731
-    age = df.age_months.astype(float)
+    age = _finite(df, "age_months")
     turn = df.bank_turnover_ratio.fillna(0).astype(float)
-    share = df.amount_to_revenue.astype(float)
-    dpd = df.bki_max_dpd_12m.astype(float)
+    share = _finite(df, "amount_to_revenue").mask(_finite(df, "revenue") <= 0, 1.0)
+    dpd = _finite(df, "bki_max_dpd_12m")
     return pd.DataFrame({
         "product": df["product"].values,
         "business_age": known(np.select([age < 12, age < 24, age < 36, age < 60, age < 120],
@@ -94,13 +101,13 @@ def monthly_payment(amount, rate: float, term_m):
 
 
 def cash_flow(df: pd.DataFrame, ref_rate: float = REF_RATE, min_dscr: float = MIN_DSCR) -> pd.DataFrame:
-    """PD, запас денежного потока и оборот к платежу (разы) по заявке; NaN - нет данных."""
-    num = lambda c: pd.to_numeric(df[c], errors="coerce") if c in df else pd.Series(np.nan, index=df.index)  # noqa: E731
+    """PD, запас денежного потока и оборот к платежу (разы) по заявке; NaN - нет данных, выручка ≤ 0 - оборот 0."""
+    num = lambda c: _finite(df, c)  # noqa: E731
     revenue = num("revenue")
     payment = monthly_payment(num("requested_amount"), ref_rate, num("requested_term_m"))
     return pd.DataFrame({"pd": num("pd"),
                          "cover": (num("ebit") / min_dscr - num("debt_service")) / (12 * payment),
-                         "turnover": (revenue / 12 / payment).where(revenue > 0)}, index=df.index)
+                         "turnover": (revenue / 12 / payment).mask(revenue <= 0, 0.0)}, index=df.index)
 
 
 def continuous_features(raw: pd.DataFrame) -> pd.DataFrame:
@@ -277,6 +284,10 @@ def train_approval(df: pd.DataFrame, y: pd.Series, groups: pd.Series = None, see
     """Обучение на 70% решений и метрики на отложенных 30% (стратифицировано). Для сравнения на том же разбиении
     учится модель только на категориях заявки (без PD и денежного потока); groups - классы риска для калибровки."""
     idx = y.index[y.notna()]
+    yes, no = int((y[idx] == 1).sum()), int((y[idx] == 0).sum())
+    if min(yes, no) < MIN_COUNT:
+        raise ValueError(f"для модели одобрения нужно не меньше {MIN_COUNT} одобрений и {MIN_COUNT} отказов среди "
+                         f"решений без дозапросов и стоп-факторов, а их {yes} и {no}")
     tr, te = train_test_split(idx, test_size=test_size, stratify=y[idx], random_state=seed)
     m = ApprovalModel.fit(df.loc[tr], y.loc[tr], **kw)
     only_bins = ApprovalModel.fit(df.loc[tr], y.loc[tr], **{**kw, "continuous": ()})
