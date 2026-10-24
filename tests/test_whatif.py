@@ -5,12 +5,14 @@ from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 
-from scoring.approval import ApprovalModel, approval_target
+from scoring.approval import ApprovalModel, approval_target, monthly_payment
 from scoring.gcurve import CurveStore
 from scoring import synth
-from scoring.whatif import SCENARIOS, Engine, evaluate, whatif
+from scoring.pricing import price
+from scoring.whatif import SCENARIOS, Engine, _derive, evaluate, whatif
 
 warnings.filterwarnings("ignore")
 ASOF = date(2024, 2, 1)
@@ -86,6 +88,22 @@ def test_soft_mode_without_credit_history(eng):
     assert r["outcome"] == "REQUEST_INFO"  # решение ждёт согласия на БКИ, а предоценка шанса уже есть
     assert r["approval_mode"] == "soft" and r["approval_imputed"] == ["bki_overdue"]
     assert 0 < r["approval_probability"] < 1
+
+
+def test_headroom_payment_uses_the_priced_rate(eng):
+    df, engine, rep = eng
+    out = rep["assessed"]
+    i = out.index[(out.risk_class <= 3) & (out.stop_codes.str.len() == 0)][0]
+    app = _derive({**df.loc[i].to_dict(), "product": "secured", "requested_term_m": 24, "debt_service": 0.0,
+                   "bki_current_dpd": 0, "bki_max_dpd_12m": 0, "tax_debt_to_revenue": 0.0, "status": "ACTIVE"},
+                  engine.policy)
+    pd_ = evaluate(engine, app)["pd"]
+    rate = price(app, pd_, engine.pricing, engine.curves, engine.asof, app["requested_amount"], all_in=False)["rate"]
+    assert rate < 0.215  # ниже опорной 22,5%, так что при опорной ставке запас был бы ниже 0,5×
+    app["ebit"] = 1.25 * 0.505 * 12 * monthly_payment(app["requested_amount"], rate, 24)  # 0,505× по ставке заявки
+    r = evaluate(engine, app)
+    at_reference = engine.approval.predict(pd.DataFrame([app]).assign(pd=r["pd"]))[0]  # без ставки - опорная
+    assert r["approval_probability"] > at_reference + 0.05  # ступень 0,5× дана по реальной ставке
 
 
 def test_engine_saved_before_this_model_is_refused_with_a_clear_message(eng, tmp_path):

@@ -10,7 +10,8 @@
 логит PD; запас денежного потока = (EBIT / min DSCR − обслуживание долга) / годовой платёж по запросу (как в
 DSCR-лимите кредитной логики): логарифм с отдельными наклонами до 0,5× и 0,5–1× и ступень на 0,5× (контрпредложение
 от половины суммы - уже одобрение), выше 1× не растёт (лимит по DSCR не режет); ln(среднемесячный оборот / платёж),
-как в модели Костяна. Платёж - аннуитет по опорной ставке REF_RATE: шанс считается до расчёта цены.
+как в модели Костяна. Платёж - аннуитет по ставке модели цены для запрошенных продукта и суммы (колонка rate: так
+DSCR-лимит считает кредитная логика); без неё - по опорной ставке REF_RATE.
 
 Знаки ограничены смыслом (логит с ограничениями на коэффициенты, L-BFGS-B): залог, РКО, обороты в банке, маркетплейс,
 гарантия, денежный поток и оборот к платежу не снижают шанс; PD, доля суммы в выручке, просрочки и молодость бизнеса
@@ -39,8 +40,10 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 FACTOR = 20 / math.log(2)
 BASE = 600
 MIN_COUNT = 30
-VERSION = 3  # версия признаков (2 - запас не выше 1×, 3 - ступень на 0,5×); другую Engine.load не загружает
-REF_RATE = 0.225  # опорная ставка платежа, годовых
+# версия признаков (2 - запас не выше 1×, 3 - ступень на 0,5×, 4 - платёж по ставке заявки); другую Engine.load
+# не загружает
+VERSION = 4
+REF_RATE = 0.225  # опорная ставка платежа, годовых, когда ставка заявки неизвестна
 MIN_DSCR = 1.25  # как в config/credit_policy.json; Engine передаёт значение из политики
 L2 = 1.0  # слабый ridge для устойчивости; на тысячах решений почти не влияет
 EPS = 1e-9
@@ -109,10 +112,12 @@ def monthly_payment(amount, rate: float, term_m):
 
 
 def cash_flow(df: pd.DataFrame, ref_rate: float = REF_RATE, min_dscr: float = MIN_DSCR) -> pd.DataFrame:
-    """PD, запас денежного потока и оборот к платежу (разы) по заявке; NaN - нет данных, выручка ≤ 0 - оборот 0."""
+    """PD, запас денежного потока и оборот к платежу (разы) по заявке; NaN - нет данных, выручка ≤ 0 - оборот 0.
+    Платёж - по ставке модели цены для заявки (колонка rate, как в DSCR-лимите кредитной логики), без неё - ref_rate."""
     num = lambda c: _finite(df, c)  # noqa: E731
     revenue = num("revenue")
-    payment = monthly_payment(num("requested_amount"), ref_rate, num("requested_term_m"))
+    rate = num("rate")
+    payment = monthly_payment(num("requested_amount"), rate.where(rate > 0, ref_rate), num("requested_term_m"))
     return pd.DataFrame({"pd": num("pd"),
                          "cover": (num("ebit") / min_dscr - num("debt_service")) / (12 * payment),
                          "turnover": (revenue / 12 / payment).mask(revenue <= 0, 0.0)}, index=df.index)
@@ -134,6 +139,8 @@ def _show(f: str, raw: pd.Series) -> str:
     v = raw[{"logit_pd": "pd", "cash_cover": "cover", "ln_turnover_to_payment": "turnover"}[f]]
     if pd.isna(v):
         return NO_DATA
+    if f == "cash_cover":  # с отбрасыванием, а не округлением: 0,499× - не «0.50×» рядом со ступенью на 0,5×
+        return f"{math.floor(v * 100) / 100:.2f}× платежа"
     return f"{v:.1%}" if f == "logit_pd" else f"{v:.1f}× платежа"
 
 
@@ -347,6 +354,7 @@ def train_approval(df: pd.DataFrame, y: pd.Series, groups: pd.Series = None, see
                           .reset_index())
     cover = cash_flow(df.loc[te], m.ref_rate, m.min_dscr).cover.to_numpy()
     band = pd.cut(cover, BANDS, right=False, labels=[_band(lo, hi) for lo, hi in zip(BANDS, BANDS[1:])])
+    band = band.add_categories(NO_DATA).fillna(NO_DATA)  # запас неизвестен - своя строка, а не пропажа из таблицы
     rep["bands"] = (pd.DataFrame({"запас": band, "y": y_te, "p": p_te}).groupby("запас", observed=True)
                     .agg(n=("y", "size"), факт=("y", "mean"), прогноз=("p", "mean")).reset_index())
     return m, rep
