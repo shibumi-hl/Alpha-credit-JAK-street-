@@ -2,8 +2,12 @@
 Коды причин: факторы, на которых компания потеряла больше всего баллов, в понятных категориях.
 
 Потеря по фактору = максимум баллов фактора в скоркарте − баллы компании. Факторы одной категории
-складываются (долг/выручка и долг/EBIT - это одна «высокая долговая нагрузка»).
+складываются (долг/выручка и долг/EBIT - это одна «высокая долговая нагрузка»). Фактор с пропущенным значением
+причины не даёт: баллы у него нейтральные (WoE = 0), но о самом факторе они ничего не говорят - нет кредитной
+истории не значит «просрочки»; недостающие ключевые данные дозапрашивает credit.missing_data.
 """
+import pandas as pd
+
 CATEGORIES = {
     "R01": "высокая долговая нагрузка",
     "R02": "короткая история оборотов",
@@ -35,10 +39,13 @@ FACTOR_REASON = {
 EPS = 1e-6
 
 
-def reason_codes(scored_row, model, top: int = 3) -> list[dict]:
-    """[{code, category, loss, factors}] по убыванию потери баллов, только с потерей > 0."""
+def reason_codes(scored_row, model, top: int = 3, app=None) -> list[dict]:
+    """[{code, category, loss, factors}] по убыванию потери баллов, только с потерей > 0.
+    app - значения факторов заявки (dict или строка): факторы, пустые в app, пропускаются."""
     by = {}
     for f in model.factors:
+        if app is not None and pd.isna(app.get(f)):
+            continue
         loss = model.max_points[f] - float(scored_row[f"points_{f}"])
         if loss > EPS:
             r = by.setdefault(FACTOR_REASON[f], {"loss": 0.0, "factors": []})
