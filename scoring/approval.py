@@ -6,11 +6,11 @@
 маршрут на другой продукт и отказ = 0; REQUEST_INFO и стоп-факторы в обучение не входят, при стоп-факторе
 вероятность 0.
 
-Признаки: категории заявки (у каждого признака одна референсная категория, без dummy trap) и три непрерывных -
+Признаки: категории заявки (у каждого признака одна референсная категория, без dummy trap) и непрерывные -
 логит PD; запас денежного потока = (EBIT / min DSCR − обслуживание долга) / годовой платёж по запросу (как в
-DSCR-лимите кредитной логики), в логарифме и не выше 1×: дальше лимит по DSCR не режет и шанс не растёт;
-ln(среднемесячный оборот / платёж), как в модели Костяна. Платёж - аннуитет по опорной ставке REF_RATE: шанс
-считается до расчёта цены.
+DSCR-лимите кредитной логики): логарифм с отдельными наклонами до 0,5× и 0,5–1× и ступень на 0,5× (контрпредложение
+от половины суммы - уже одобрение), выше 1× не растёт (лимит по DSCR не режет); ln(среднемесячный оборот / платёж),
+как в модели Костяна. Платёж - аннуитет по опорной ставке REF_RATE: шанс считается до расчёта цены.
 
 Знаки ограничены смыслом (логит с ограничениями на коэффициенты, L-BFGS-B): залог, РКО, обороты в банке, маркетплейс,
 гарантия, денежный поток и оборот к платежу не снижают шанс; PD, доля суммы в выручке, просрочки и молодость бизнеса
@@ -39,7 +39,7 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 FACTOR = 20 / math.log(2)
 BASE = 600
 MIN_COUNT = 30
-VERSION = 2  # версия признаков (2 - запас не выше 1×); модель другой версии Engine.load не загружает
+VERSION = 3  # версия признаков (2 - запас не выше 1×, 3 - ступень на 0,5×); другую Engine.load не загружает
 REF_RATE = 0.225  # опорная ставка платежа, годовых
 MIN_DSCR = 1.25  # как в config/credit_policy.json; Engine передаёт значение из политики
 L2 = 1.0  # слабый ridge для устойчивости; на тысячах решений почти не влияет
@@ -59,14 +59,19 @@ UNORDERED = {"product"}
 # +1 - дальше от референса шанс не ниже, −1 - не выше; у продукта - любой продукт не выше залогового
 SIGNS = {"product": -1, "business_age": -1, "rko": 1, "bank_turnover": 1, "amount_share": -1, "marketplace": 1,
          "guarantee": 1, "bki_overdue": -1}
-CONTINUOUS = {"logit_pd": -1, "cash_cover": 1, "ln_turnover_to_payment": 1}
-UNITS = {"logit_pd": "логит PD", "cash_cover": "ln(запас / платёж), до 1×",
-         "ln_turnover_to_payment": "ln(оборот / платёж)"}
+CONTINUOUS = {"logit_pd": -1, "cover_lo": 1, "cover_hi": 1, "cover_ge_half": 1, "ln_turnover_to_payment": 1}
+# слагаемые одного признака: в объяснении и soft-режиме - одной строкой
+GROUP = {"cover_lo": "cash_cover", "cover_hi": "cash_cover", "cover_ge_half": "cash_cover"}
+UNITS = {"logit_pd": "логит PD", "cover_lo": "ln(запас / платёж), 0.1–0.5×", "cover_hi": "ln(запас / платёж), 0.5–1×",
+         "cover_ge_half": "1, если запас ≥ 0.5×", "ln_turnover_to_payment": "ln(оборот / платёж)"}
+BANDS = [-np.inf, 0, 0.25, 0.4, 0.5, 0.6, 0.75, 1.0, np.inf]  # полосы запаса к платежу для калибровки в отчёте
 LABELS = {"product": "Продукт", "business_age": "Возраст бизнеса, мес.", "rko": "РКО в банке",
           "bank_turnover": "Обороты в банке / лимит", "amount_share": "Сумма / годовая выручка",
           "marketplace": "Селлер маркетплейса с данными", "guarantee": "Гарантия Корпорации МСП",
           "bki_overdue": "Просрочки в БКИ за 12 мес.", "logit_pd": "PD скоркарты",
-          "cash_cover": "Запас денежного потока к платежу", "ln_turnover_to_payment": "Среднемесячный оборот к платежу"}
+          "cash_cover": "Запас денежного потока к платежу", "ln_turnover_to_payment": "Среднемесячный оборот к платежу",
+          "cover_lo": "Запас денежного потока: до 0.5× платежа", "cover_hi": "Запас денежного потока: 0.5–1× платежа",
+          "cover_ge_half": "Запас денежного потока: ступень на 0.5× платежа"}
 NO_DATA = "нет данных"
 
 
@@ -114,10 +119,14 @@ def cash_flow(df: pd.DataFrame, ref_rate: float = REF_RATE, min_dscr: float = MI
 
 
 def continuous_features(raw: pd.DataFrame) -> pd.DataFrame:
+    """Запас денежного потока - три слагаемых (GROUP): наклон до 0,5× платежа, наклон 0,5–1× и ступень на 0,5×:
+    контрпредложение от половины суммы - уже одобрение, а выше 1× DSCR-лимит не режет и шанс не растёт."""
     p = raw["pd"].clip(1e-6, 1 - 1e-6)
+    cover = raw.cover
     return pd.DataFrame({"logit_pd": np.log(p / (1 - p)),
-                         # убыток или долг без запаса - 0,1×; выше 1× платежа DSCR-лимит не режет, шанс не растёт
-                         "cash_cover": np.log(raw.cover.clip(0.1, 1.0)),
+                         "cover_lo": np.log(cover.clip(0.1, 0.5)),  # убыток или долг без запаса - 0,1×
+                         "cover_hi": np.log(cover.clip(0.5, 1.0)),
+                         "cover_ge_half": (cover >= 0.5).astype(float).where(cover.notna()),
                          "ln_turnover_to_payment": np.log(raw.turnover.clip(0.2, 20))}, index=raw.index)
 
 
@@ -238,7 +247,8 @@ class ApprovalModel:
         """По каждой строке - признаки, заменённые средним по обучению (soft-режим); пусто - полный режим."""
         miss = pd.concat([bin_application(df)[list(self.steps)].isna(),
                           continuous_features(self._raw(df))[list(self.continuous)].isna()], axis=1)
-        return [[c for c in miss.columns if r[c]] for _, r in miss.iterrows()]
+        keys = [GROUP.get(c, c) for c in miss.columns]
+        return [list(dict.fromkeys(k for k, gap in zip(keys, r) if gap)) for r in miss.to_numpy()]
 
     def points_table(self) -> pd.DataFrame:
         rows = []
@@ -270,8 +280,11 @@ class ApprovalModel:
         b, raw, X = bin_application(one).iloc[0], self._raw(one).iloc[0], self.design(one).iloc[0]
         out = [{"признак": LABELS[f], "категория": b[f] if isinstance(b[f], str) else NO_DATA,
                 "баллы": FACTOR * sum(self.params[c] * X[c] for c in self._columns(f))} for f in CATEGORIES]
-        out += [{"признак": LABELS[f], "категория": _show(f, raw), "баллы": FACTOR * self.params[f] * X[f]}
-                for f in self.continuous]
+        parts = {}
+        for f in self.continuous:  # слагаемые запаса - одной строкой
+            key = GROUP.get(f, f)
+            parts[key] = parts.get(key, 0.0) + FACTOR * self.params[f] * X[f]
+        out += [{"признак": LABELS[k], "категория": _show(k, raw), "баллы": v} for k, v in parts.items()]
         return sorted(out, key=lambda r: -abs(r["баллы"]))
 
     def save(self, path: Path):
@@ -332,4 +345,12 @@ def train_approval(df: pd.DataFrame, y: pd.Series, groups: pd.Series = None, see
         g = pd.DataFrame({"risk_class": groups.loc[te].to_numpy(), "y": y_te, "p": p_te})
         rep["classes"] = (g.groupby("risk_class").agg(n=("y", "size"), факт=("y", "mean"), прогноз=("p", "mean"))
                           .reset_index())
+    cover = cash_flow(df.loc[te], m.ref_rate, m.min_dscr).cover.to_numpy()
+    band = pd.cut(cover, BANDS, right=False, labels=[_band(lo, hi) for lo, hi in zip(BANDS, BANDS[1:])])
+    rep["bands"] = (pd.DataFrame({"запас": band, "y": y_te, "p": p_te}).groupby("запас", observed=True)
+                    .agg(n=("y", "size"), факт=("y", "mean"), прогноз=("p", "mean")).reset_index())
     return m, rep
+
+
+def _band(lo: float, hi: float) -> str:
+    return f"< {hi:g}×" if lo == -np.inf else f"≥ {lo:g}×" if hi == np.inf else f"{lo:g}–{hi:g}×"

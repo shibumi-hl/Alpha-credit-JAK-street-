@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from scoring import synth
-from scoring.approval import (BASE, CATEGORIES, CONTINUOUS, FACTOR, LABELS, REF_RATE, SIGNS, ApprovalModel,
+from scoring.approval import (BASE, CATEGORIES, CONTINUOUS, FACTOR, GROUP, LABELS, REF_RATE, SIGNS, ApprovalModel,
                               approval_target, bin_application, cash_flow, cross_validate, monthly_payment,
                               train_approval)
 from scoring.assess import assess
@@ -121,6 +121,28 @@ def test_holdout_metrics_show_what_pd_and_cash_flow_add(fitted):
     cls = rep["classes"]
     assert {"risk_class", "n", "факт", "прогноз"} <= set(cls.columns) and cls.n.sum() == rep["n_test"]
     assert (cls.прогноз - cls.факт).abs().max() < 0.1  # шанс откалиброван и внутри классов риска
+
+
+def test_chance_is_calibrated_across_headroom_bands(fitted):
+    _, _, _, _, rep = fitted
+    b = rep["bands"]  # отложенные 30% по полосам запаса денежного потока к платежу
+    assert {"запас", "n", "факт", "прогноз"} <= set(b.columns) and b.n.sum() == rep["n_test"]
+    big = b[b.n >= 100]
+    assert len(big) >= 4 and (big.прогноз - big.факт).abs().max() < 0.1  # и около порога 0,5×, а не только в среднем
+
+
+def test_crossing_half_a_payment_is_a_step(fitted):
+    df, _, _, m, _ = fitted
+    row = df.iloc[[0]].assign(product="secured", pd=0.01, debt_service=0.0, requested_term_m=24, has_rko=0,
+                              bank_turnover_ratio=0.0, marketplace=0, guarantee=0)
+    pay = 12 * monthly_payment(float(row.requested_amount.iloc[0]), REF_RATE, 24)
+
+    def p(cover):
+        return m.predict(row.assign(ebit=1.25 * cover * pay))[0]
+
+    jump = p(0.5) - p(0.499)  # контрпредложение от половины суммы - уже одобрение
+    assert jump > 0.05 and jump > 20 * (p(0.8) - p(0.799))
+    assert p(0.3) < p(0.45) < p(0.499) and p(0.5) < p(0.7) < p(1.0)  # и плавный рост по обе стороны
 
 
 def test_soft_mode_imputes_missing_inputs_neutrally(fitted):
@@ -240,7 +262,9 @@ def test_explanation_sums_to_score(fitted):
     df, _, _, m, _ = fitted
     row = df.iloc[0]
     parts = m.explain(row)
-    assert {x["признак"] for x in parts} == {LABELS[f] for f in [*CATEGORIES, *CONTINUOUS]}
+    # три слагаемых запаса (до 0,5×, 0,5–1× и ступень) клиенту - одной строкой
+    assert {x["признак"] for x in parts} == {LABELS[GROUP.get(f, f)] for f in [*CATEGORIES, *CONTINUOUS]}
+    assert len(parts) == len(CATEGORIES) + len(CONTINUOUS) - 2
     assert [abs(p["баллы"]) for p in parts] == sorted((abs(p["баллы"]) for p in parts), reverse=True)
     total = BASE + FACTOR * m.intercept + sum(p["баллы"] for p in parts)
     assert total == pytest.approx(m.score(df.iloc[[0]])[0])

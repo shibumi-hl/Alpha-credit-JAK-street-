@@ -92,7 +92,8 @@ def test_engine_saved_before_this_model_is_refused_with_a_clear_message(eng, tmp
     _, engine, _ = eng
     before_cap = replace(engine.approval)
     del before_cap.__dict__["version"]  # пикл до номера версии признаков (запас ещё до 10×)
-    for old in (SimpleNamespace(columns=[], intercept=0.0, coef={}, counts={}), before_cap):  # до PD; до 1×
+    before_step = replace(engine.approval, version=engine.approval.version - 1)  # запас до 1×, без ступени на 0,5×
+    for old in (SimpleNamespace(columns=[], intercept=0.0, coef={}, counts={}), before_cap, before_step):
         replace(engine, approval=old).save(tmp_path / "engine.pkl")
         with pytest.raises(ValueError, match="train_scorecard"):
             Engine.load(tmp_path / "engine.pkl")
