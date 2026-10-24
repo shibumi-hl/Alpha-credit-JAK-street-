@@ -20,7 +20,7 @@ def assess(df: pd.DataFrame, model, policy: dict, top: int = 3, pricing: dict = 
     rows = []
     for (_, a), (_, s) in zip(df.iterrows(), scored.iterrows()):
         app = {k: a.get(k) for k in _FIELDS}
-        reasons = reason_codes(s, model, top)
+        reasons = reason_codes(s, model, top, a)
         rate_fn = None
         if pricing is not None:
             def rate_fn(product, _cls, amount, app=app, pd_=float(s.pd)):
