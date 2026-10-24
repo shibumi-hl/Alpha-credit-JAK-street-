@@ -8,8 +8,9 @@
 
 Признаки: категории заявки (у каждого признака одна референсная категория, без dummy trap) и три непрерывных -
 логит PD; запас денежного потока = (EBIT / min DSCR − обслуживание долга) / годовой платёж по запросу (как в
-DSCR-лимите кредитной логики); ln(среднемесячный оборот / платёж), как в модели Костяна. Платёж - аннуитет по
-опорной ставке REF_RATE: шанс считается до расчёта цены.
+DSCR-лимите кредитной логики), в логарифме и не выше 1×: дальше лимит по DSCR не режет и шанс не растёт;
+ln(среднемесячный оборот / платёж), как в модели Костяна. Платёж - аннуитет по опорной ставке REF_RATE: шанс
+считается до расчёта цены.
 
 Знаки ограничены смыслом (логит с ограничениями на коэффициенты, L-BFGS-B): залог, РКО, обороты в банке, маркетплейс,
 гарантия, денежный поток и оборот к платежу не снижают шанс; PD, доля суммы в выручке, просрочки и молодость бизнеса
@@ -33,11 +34,12 @@ import pandas as pd
 from scipy.optimize import minimize
 from scipy.special import expit
 from sklearn.metrics import log_loss, roc_auc_score
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold, train_test_split
 
 FACTOR = 20 / math.log(2)
 BASE = 600
 MIN_COUNT = 30
+VERSION = 2  # версия признаков (2 - запас не выше 1×); модель другой версии Engine.load не загружает
 REF_RATE = 0.225  # опорная ставка платежа, годовых
 MIN_DSCR = 1.25  # как в config/credit_policy.json; Engine передаёт значение из политики
 L2 = 1.0  # слабый ridge для устойчивости; на тысячах решений почти не влияет
@@ -58,7 +60,8 @@ UNORDERED = {"product"}
 SIGNS = {"product": -1, "business_age": -1, "rko": 1, "bank_turnover": 1, "amount_share": -1, "marketplace": 1,
          "guarantee": 1, "bki_overdue": -1}
 CONTINUOUS = {"logit_pd": -1, "cash_cover": 1, "ln_turnover_to_payment": 1}
-UNITS = {"logit_pd": "логит PD", "cash_cover": "ln(запас / платёж)", "ln_turnover_to_payment": "ln(оборот / платёж)"}
+UNITS = {"logit_pd": "логит PD", "cash_cover": "ln(запас / платёж), до 1×",
+         "ln_turnover_to_payment": "ln(оборот / платёж)"}
 LABELS = {"product": "Продукт", "business_age": "Возраст бизнеса, мес.", "rko": "РКО в банке",
           "bank_turnover": "Обороты в банке / лимит", "amount_share": "Сумма / годовая выручка",
           "marketplace": "Селлер маркетплейса с данными", "guarantee": "Гарантия Корпорации МСП",
@@ -113,7 +116,8 @@ def cash_flow(df: pd.DataFrame, ref_rate: float = REF_RATE, min_dscr: float = MI
 def continuous_features(raw: pd.DataFrame) -> pd.DataFrame:
     p = raw["pd"].clip(1e-6, 1 - 1e-6)
     return pd.DataFrame({"logit_pd": np.log(p / (1 - p)),
-                         "cash_cover": np.log(raw.cover.clip(0.1, 10)),  # убыток или долг без запаса - 0,1×
+                         # убыток или долг без запаса - 0,1×; выше 1× платежа DSCR-лимит не режет, шанс не растёт
+                         "cash_cover": np.log(raw.cover.clip(0.1, 1.0)),
                          "ln_turnover_to_payment": np.log(raw.turnover.clip(0.2, 20))}, index=raw.index)
 
 
@@ -169,6 +173,7 @@ class ApprovalModel:
     n: int = 0
     ref_rate: float = REF_RATE
     min_dscr: float = MIN_DSCR
+    version: int = 0  # VERSION признаков, на которых обучена; 0 - пикл до номера версии
 
     def _columns(self, f: str) -> list:
         return [f"{f}={CATEGORIES[f][0][j]}" for j in self.steps.get(f, [])]
@@ -192,7 +197,8 @@ class ApprovalModel:
         counts = {f"{f}={c}": int((bins[f] == c).sum()) for f, (cats, _) in CATEGORIES.items() for c in cats}
         steps = {f: [j for j, c in enumerate(cats) if c != ref and counts[f"{f}={c}"] >= MIN_COUNT]
                  for f, (cats, ref) in CATEGORIES.items()}
-        m = cls(steps, tuple(continuous), counts=counts, n=int(keep.sum()), ref_rate=ref_rate, min_dscr=min_dscr)
+        m = cls(steps, tuple(continuous), counts=counts, n=int(keep.sum()), ref_rate=ref_rate, min_dscr=min_dscr,
+                version=VERSION)
         m.fill = {c: float(np.nan_to_num(_code(bins, f, j).mean()))
                   for f, js in steps.items() for j, c in zip(js, m._columns(f))}
         num = continuous_features(m._raw(d))
@@ -279,10 +285,33 @@ class ApprovalModel:
             return pickle.load(f)
 
 
+def _gini(y, p) -> float:
+    return 2 * roc_auc_score(y, p) - 1
+
+
+def cross_validate(df: pd.DataFrame, y: pd.Series, k: int = 5, seed: int = 7, **kw) -> dict:
+    """Gini по k стратифицированным фолдам всех решений: на обучающих фолдах, на отложенном фолде и на отложенном
+    фолде у модели только на категориях заявки - по значению на фолд; k < 2 - без кросс-валидации (пусто)."""
+    idx = y.index[y.notna()]
+    yy = y[idx].astype(int)
+    out = {"cv_gini_train": [], "cv_gini_test": [], "cv_gini_test_categories": []}
+    if k < 2:
+        return out
+    for a, b in StratifiedKFold(k, shuffle=True, random_state=seed).split(idx, yy):
+        tr, te = idx[a], idx[b]
+        m = ApprovalModel.fit(df.loc[tr], y.loc[tr], **kw)
+        only_bins = ApprovalModel.fit(df.loc[tr], y.loc[tr], **{**kw, "continuous": ()})
+        out["cv_gini_train"].append(_gini(yy[tr], m.predict(df.loc[tr])))
+        out["cv_gini_test"].append(_gini(yy[te], m.predict(df.loc[te])))
+        out["cv_gini_test_categories"].append(_gini(yy[te], only_bins.predict(df.loc[te])))
+    return out
+
+
 def train_approval(df: pd.DataFrame, y: pd.Series, groups: pd.Series = None, seed: int = 7, test_size: float = 0.3,
-                   **kw) -> tuple[ApprovalModel, dict]:
+                   cv: int = 5, **kw) -> tuple[ApprovalModel, dict]:
     """Обучение на 70% решений и метрики на отложенных 30% (стратифицировано). Для сравнения на том же разбиении
-    учится модель только на категориях заявки (без PD и денежного потока); groups - классы риска для калибровки."""
+    учится модель только на категориях заявки (без PD и денежного потока); groups - классы риска для калибровки.
+    Gini ещё и по cv стратифицированным фолдам всех решений (cross_validate) - среднее и разброс без удачи разбиения."""
     idx = y.index[y.notna()]
     yes, no = int((y[idx] == 1).sum()), int((y[idx] == 0).sum())
     if min(yes, no) < MIN_COUNT:
@@ -293,12 +322,12 @@ def train_approval(df: pd.DataFrame, y: pd.Series, groups: pd.Series = None, see
     only_bins = ApprovalModel.fit(df.loc[tr], y.loc[tr], **{**kw, "continuous": ()})
     y_tr, y_te = y.loc[tr].astype(int).to_numpy(), y.loc[te].astype(int).to_numpy()
     p_tr, p_te = m.predict(df.loc[tr]), m.predict(df.loc[te])
-    gini = lambda yy, pp: 2 * roc_auc_score(yy, pp) - 1  # noqa: E731
     rep = {"n_train": len(tr), "n_test": len(te), "rate_train": float(y_tr.mean()), "rate_test": float(y_te.mean()),
-           "gini_train": gini(y_tr, p_tr), "gini_test": gini(y_te, p_te),
-           "gini_test_categories": gini(y_te, only_bins.predict(df.loc[te])),
+           "gini_train": _gini(y_tr, p_tr), "gini_test": _gini(y_te, p_te),
+           "gini_test_categories": _gini(y_te, only_bins.predict(df.loc[te])),
            "brier_test": float(np.mean((p_te - y_te) ** 2)), "brier_const": float(np.mean((y_tr.mean() - y_te) ** 2)),
-           "logloss_test": float(log_loss(y_te, np.clip(p_te, 1e-9, 1 - 1e-9))), "mean_p_test": float(p_te.mean())}
+           "logloss_test": float(log_loss(y_te, np.clip(p_te, 1e-9, 1 - 1e-9))), "mean_p_test": float(p_te.mean()),
+           **cross_validate(df, y, cv, seed, **kw)}
     if groups is not None:
         g = pd.DataFrame({"risk_class": groups.loc[te].to_numpy(), "y": y_te, "p": p_te})
         rep["classes"] = (g.groupby("risk_class").agg(n=("y", "size"), факт=("y", "mean"), прогноз=("p", "mean"))

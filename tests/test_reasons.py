@@ -63,7 +63,7 @@ def test_factor_with_missing_value_gives_no_reason():
 @pytest.fixture(scope="module")
 def synth_model():
     df = synth.generate(8000, seed=21, asof=date(2026, 10, 20))
-    model, _ = train(df, seed=3)
+    model, _ = train(df, seed=3, cv=0)
     return df, model
 
 

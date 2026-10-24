@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from scoring.approval import ApprovalModel, approval_target, train_approval
+from scoring.approval import VERSION as APPROVAL_VERSION, ApprovalModel, approval_target, train_approval
 from scoring.assess import assess
 from scoring.credit import _num, load_policy, validate
 from scoring.pricing import load_pricing
@@ -95,13 +95,15 @@ class Engine:
     asof: date
 
     @classmethod
-    def fit(cls, df: pd.DataFrame, policy=None, pricing=None, curves=None, asof: date = None, seed: int = 7):
+    def fit(cls, df: pd.DataFrame, policy=None, pricing=None, curves=None, asof: date = None, seed: int = 7,
+            cv: int = 5):
+        """cv - число фолдов для Gini обеих моделей в отчёте; cv < 2 - без кросс-валидации (быстрее)."""
         policy, pricing, asof = policy or load_policy(), pricing or load_pricing(), asof or date.today()
-        model, rep = train(df, seed=seed)
+        model, rep = train(df, seed=seed, cv=cv)
         out = assess(df, model, policy, pricing=pricing, curves=curves, asof=asof)
         y = approval_target(out, df.requested_amount)
         scored = df.assign(pd=out.pd.to_numpy())  # PD скоркарты - вход модели одобрения
-        appr, appr_rep = train_approval(scored, y, groups=out.risk_class, seed=seed, min_dscr=policy["min_dscr"])
+        appr, appr_rep = train_approval(scored, y, groups=out.risk_class, seed=seed, cv=cv, min_dscr=policy["min_dscr"])
         out["approval_probability"] = appr.predict(scored, stopped=(out.stop_codes.str.len() > 0).to_numpy())
         eng = cls(model, appr, policy, pricing, curves, asof)
         return eng, {"scorecard": rep, "approval": appr_rep, "assessed": out, "approval_table": appr.points_table(),
@@ -116,7 +118,7 @@ class Engine:
     def load(path: Path) -> "Engine":
         with open(path, "rb") as f:
             eng = pickle.load(f)
-        if not hasattr(eng.approval, "steps"):  # модель одобрения до PD и денежного потока
+        if getattr(eng.approval, "version", 0) != APPROVAL_VERSION:  # признаки другой версии (до PD, до запаса 1×)
             raise ValueError(f"{path}: модели обучены прошлой версией кода - переобучите: py scripts/train_scorecard.py")
         return eng
 

@@ -28,7 +28,7 @@ def _load(name):
 
 def test_assess_gives_score_class_decision_and_reasons():
     df = synth.generate(8000, seed=21, asof=date(2026, 10, 20))
-    model, _ = train(df, seed=3)
+    model, _ = train(df, seed=3, cv=0)
     out = assess(df, model, load_policy())
     assert len(out) == len(df)
     assert set(out.outcome) <= set(OUTCOMES) and len(set(out.outcome)) >= 3
@@ -43,6 +43,14 @@ def test_assess_gives_score_class_decision_and_reasons():
     # хуже класс - чаще отказ
     worst, best = out.risk_class.max(), out.risk_class.min()
     assert (out[out.risk_class == worst].outcome == "REJECT").mean() > (out[out.risk_class == best].outcome == "REJECT").mean()
+
+
+def test_report_spread_counts_only_scored_folds():
+    tr = _load("train_scorecard")
+    assert tr._spread([0.62, 0.58]) == "0.600 ± 0.020"
+    assert tr._spread([0.6, float("nan"), 0.5]) == "0.550 ± 0.050 (по 2 из 3 фолдов)"
+    assert tr._spread([float("nan")] * 5) == "нет оценки"
+    assert tr._folds([0.6, float("nan")]) == "0.600, —"
 
 
 def test_scripts_end_to_end_on_synthetic(tmp_path, monkeypatch, capsys):
@@ -141,7 +149,7 @@ def test_real_check_on_the_holdout_half(tmp_path):
     from scoring.scorecard import train
     tr = _load("train_scorecard")
     df = synth.generate(6000, seed=8, asof=date(2026, 10, 23))
-    model, _ = train(df, seed=2)
+    model, _ = train(df, seed=2, cv=0)
     assert tr.real_check(df, model, tmp_path) is None  # нет данных ЕГРЮЛ - нет раздела
     rng = np.random.default_rng(8)
     event = (rng.random(len(df)) < np.where(df.default_12m == 1, 0.5, 0.01))

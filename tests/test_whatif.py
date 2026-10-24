@@ -20,7 +20,7 @@ CURVES = CurveStore.from_csv(Path(__file__).parent / "fixtures" / "gcurve_params
 @pytest.fixture(scope="module")
 def eng():
     df = synth.generate(12000, seed=41, asof=ASOF)
-    engine, rep = Engine.fit(df, curves=CURVES, asof=ASOF, seed=5)
+    engine, rep = Engine.fit(df, curves=CURVES, asof=ASOF, seed=5, cv=0)
     return df, engine, rep
 
 
@@ -90,10 +90,14 @@ def test_soft_mode_without_credit_history(eng):
 
 def test_engine_saved_before_this_model_is_refused_with_a_clear_message(eng, tmp_path):
     _, engine, _ = eng
-    old = replace(engine, approval=SimpleNamespace(columns=[], intercept=0.0, coef={}, counts={}))  # поля старой модели
-    old.save(tmp_path / "engine.pkl")
-    with pytest.raises(ValueError, match="train_scorecard"):
-        Engine.load(tmp_path / "engine.pkl")
+    before_cap = replace(engine.approval)
+    del before_cap.__dict__["version"]  # пикл до номера версии признаков (запас ещё до 10×)
+    for old in (SimpleNamespace(columns=[], intercept=0.0, coef={}, counts={}), before_cap):  # до PD; до 1×
+        replace(engine, approval=old).save(tmp_path / "engine.pkl")
+        with pytest.raises(ValueError, match="train_scorecard"):
+            Engine.load(tmp_path / "engine.pkl")
+    engine.save(tmp_path / "engine.pkl")
+    assert Engine.load(tmp_path / "engine.pkl").approval.version == engine.approval.version
 
 
 def test_scenarios_never_lower_the_chance_even_if_decisions_suggest_it(eng):

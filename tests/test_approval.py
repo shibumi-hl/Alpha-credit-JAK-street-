@@ -7,8 +7,9 @@ import pandas as pd
 import pytest
 
 from scoring import synth
-from scoring.approval import (BASE, CATEGORIES, CONTINUOUS, FACTOR, LABELS, SIGNS, ApprovalModel, approval_target,
-                              bin_application, cash_flow, train_approval)
+from scoring.approval import (BASE, CATEGORIES, CONTINUOUS, FACTOR, LABELS, REF_RATE, SIGNS, ApprovalModel,
+                              approval_target, bin_application, cash_flow, cross_validate, monthly_payment,
+                              train_approval)
 from scoring.assess import assess
 from scoring.credit import load_policy
 from scoring.scorecard import train
@@ -19,7 +20,7 @@ warnings.filterwarnings("ignore")
 @pytest.fixture(scope="module")
 def fitted():
     df = synth.generate(15000, seed=31, asof=date(2026, 10, 22))
-    model, _ = train(df, seed=3)
+    model, _ = train(df, seed=3, cv=0)
     out = assess(df, model, load_policy())
     df = df.assign(pd=out.pd.to_numpy())
     y = approval_target(out, df.requested_amount)
@@ -103,9 +104,10 @@ def test_pd_cash_flow_and_payment_move_the_chance(fitted):
 
     assert p(pd=0.01) > p(pd=0.05) > p(pd=0.2)
     rev = float(row.revenue.iloc[0])
-    assert p(ebit=0.3 * rev) > p(ebit=0.05 * rev) > p(ebit=-0.05 * rev)
-    amounts = [0.05 * rev, 0.2 * rev, 0.6 * rev]
-    chances = [p(requested_amount=a, amount_to_revenue=a / rev) for a in amounts]
+    pay = 12 * monthly_payment(float(row.requested_amount.iloc[0]), REF_RATE, 24)
+    assert p(ebit=1.25 * 0.9 * pay) > p(ebit=1.25 * 0.4 * pay) > p(ebit=-0.05 * rev)  # запас ниже 1× платежа
+    amounts = [0.05 * rev, 0.2 * rev, 0.6 * rev]  # при EBIT 2% выручки запас ниже 1× у всех сумм
+    chances = [p(requested_amount=a, amount_to_revenue=a / rev, ebit=0.02 * rev) for a in amounts]
     assert chances[0] > chances[1] > chances[2]
 
 
@@ -135,6 +137,47 @@ def test_soft_mode_imputes_missing_inputs_neutrally(fitted):
     assert m.logit(soft)[0] == pytest.approx(m.logit(variants).mean())
     shown = {x["признак"]: x["категория"] for x in m.explain(soft.iloc[0])}
     assert shown[LABELS["bki_overdue"]] == "нет данных" and shown[LABELS["logit_pd"]] == "нет данных"
+
+
+def test_headroom_above_one_payment_adds_nothing(fitted):
+    df, _, _, m, _ = fitted
+    row = df.iloc[[0]].assign(debt_service=0.0, requested_term_m=24)
+    pay = 12 * monthly_payment(float(row.requested_amount.iloc[0]), REF_RATE, 24)
+
+    def p(cover):  # EBIT, при котором запас = cover годовых платежей
+        return m.predict(row.assign(ebit=1.25 * cover * pay))[0]
+
+    assert p(2.0) == pytest.approx(p(1.0)) and p(8.0) == pytest.approx(p(1.0))  # DSCR-лимит уже не режет
+    assert p(0.3) < p(0.6) < p(1.0)
+
+
+def test_cross_validated_gini_comes_from_held_out_folds(fitted):
+    df, _, y, _, rep = fitted
+    assert len(rep["cv_gini_test"]) == len(rep["cv_gini_train"]) == len(rep["cv_gini_test_categories"]) == 5
+    assert np.mean(rep["cv_gini_test"]) > np.mean(rep["cv_gini_test_categories"]) + 0.1
+    assert np.mean(rep["cv_gini_test"]) == pytest.approx(rep["gini_test"], abs=0.05)
+    rng = np.random.default_rng(1)  # случайные решения: вне фолда предсказывать нечего
+    noise = pd.Series((rng.random(len(y)) < 0.3).astype(float), index=y.index).where(y.notna())
+    _, r = train_approval(df, noise, seed=3)
+    assert abs(np.mean(r["cv_gini_test"])) < 0.05
+
+
+def test_approval_folds_never_train_on_their_held_out_decisions(fitted, monkeypatch):
+    df, _, y, _, _ = fitted
+    seen, real = [], ApprovalModel.fit.__func__
+
+    def spy(cls, d, yy, **kw):  # какие решения видит каждая подгонка
+        seen.append(d.index)
+        return real(cls, d, yy, **kw)
+
+    monkeypatch.setattr(ApprovalModel, "fit", classmethod(spy))
+    r = cross_validate(df, y, k=5, seed=3)
+    idx = y.index[y.notna()]
+    assert len(seen) == 10 and all(seen[i].equals(seen[i + 1]) for i in range(0, 10, 2))  # полная и «категории»
+    held = [idx.difference(ix) for ix in seen[::2]]
+    assert sum(map(len, held)) == len(idx) == len(set().union(*map(set, held)))  # фолды не пересекаются, покрывают всё
+    assert len(r["cv_gini_test"]) == 5
+    assert cross_validate(df, y, k=0) == {"cv_gini_train": [], "cv_gini_test": [], "cv_gini_test_categories": []}
 
 
 def test_cash_flow_multiples_match_a_hand_calculation():

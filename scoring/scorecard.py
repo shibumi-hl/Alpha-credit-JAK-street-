@@ -15,7 +15,7 @@ import pandas as pd
 from optbinning import BinningProcess, Scorecard
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold, train_test_split
 
 from scoring.synth import CATEGORICAL, FEATURES
 
@@ -97,17 +97,51 @@ def select_factors(tr: pd.DataFrame, target: str, features) -> tuple[list, pd.Da
     return [f for f in features if f in chosen], iv.reset_index(drop=True)
 
 
-def train(df: pd.DataFrame, target: str = "default_12m", features=FEATURES, seed: int = 7, test_size: float = 0.3):
-    """Обучение на 70% и отчёт на 30% (стратифицировано). ValueError, если факторов с IV ≥ 0.02 меньше 8."""
-    tr, te = train_test_split(df, test_size=test_size, stratify=df[target], random_state=seed)
+def _fit(tr: pd.DataFrame, target: str, features, strict: bool = True) -> tuple[Scorecard, list, pd.DataFrame]:
+    """Отбор факторов по IV, биннинг и регрессия на tr. strict - ValueError, если факторов меньше MIN_FACTORS."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         factors, iv = select_factors(tr, target, features)
-        if len(factors) < MIN_FACTORS:
+        if strict and len(factors) < MIN_FACTORS:
             raise ValueError(f"после отбора по IV осталось {len(factors)} факторов, нужно не меньше {MIN_FACTORS}: {factors}")
+        if not factors:
+            return None, factors, iv
         sc = Scorecard(binning_process=_binning(factors), estimator=LogisticRegression(max_iter=2000),
                        scaling_method="pdo_odds", scaling_method_params={"pdo": PDO, "odds": ODDS, "scorecard_points": BASE})
         sc.fit(tr[factors], tr[target])
+    return sc, factors, iv
+
+
+def cross_validate(df: pd.DataFrame, target: str = "default_12m", features=FEATURES, k: int = 5,
+                   seed: int = 7) -> pd.DataFrame:
+    """Gini по k стратифицированным фолдам. Отбор факторов, биннинг и регрессия - заново на каждом обучающем фолде,
+    так что отложенный фолд не участвует ни в чём; по строке на фолд. Фолд, где по IV прошло меньше MIN_FACTORS
+    факторов, не оценивается (Gini NaN): train() такую модель не принял бы. k < 2 - без кросс-валидации (пусто);
+    дефолтов или компаний без дефолта меньше k - ValueError."""
+    cols = ["fold", "n_test", "dr_test", "factors", "gini_train", "gini_test"]
+    if k < 2:
+        return pd.DataFrame(columns=cols)
+    counts = df[target].value_counts()
+    if len(counts) < 2 or counts.min() < k:
+        raise ValueError(f"для {k} фолдов нужно не меньше {k} дефолтов и {k} компаний без дефолта, а их "
+                         f"{int(counts.get(1, 0))} и {int(counts.get(0, 0))}")
+    rows = []
+    for i, (a, b) in enumerate(StratifiedKFold(k, shuffle=True, random_state=seed).split(df, df[target]), 1):
+        tr, te = df.iloc[a], df.iloc[b]
+        sc, factors, _ = _fit(tr, target, features, strict=False)
+        g = (lambda d: 2 * roc_auc_score(d[target], sc.predict_proba(d[factors])[:, 1]) - 1) \
+            if sc is not None and len(factors) >= MIN_FACTORS else (lambda d: np.nan)
+        rows.append({"fold": i, "n_test": len(te), "dr_test": float(te[target].mean()), "factors": len(factors),
+                     "gini_train": g(tr), "gini_test": g(te)})
+    return pd.DataFrame(rows, columns=cols)
+
+
+def train(df: pd.DataFrame, target: str = "default_12m", features=FEATURES, seed: int = 7, test_size: float = 0.3,
+          cv: int = 5):
+    """Обучение на 70% и отчёт на 30% (стратифицировано), плюс Gini по cv фолдам всей выборки (cross_validate) -
+    без удачи одного разбиения; cv < 2 - без неё. ValueError, если факторов с IV ≥ 0.02 меньше 8."""
+    tr, te = train_test_split(df, test_size=test_size, stratify=df[target], random_state=seed)
+    sc, factors, iv = _fit(tr, target, features)
     t = sc.table("detailed")
     lines, max_points = {}, {}
     for f in factors:
@@ -122,7 +156,7 @@ def train(df: pd.DataFrame, target: str = "default_12m", features=FEATURES, seed
     s_te = model.points(te).sum(axis=1).to_numpy()
     lr = LogisticRegression(C=1e6, max_iter=1000).fit(s_te.reshape(-1, 1), te[target])
     model.calib = (float(lr.intercept_[0]), float(lr.coef_[0, 0]))
-    return model, report(model, tr, te, target)
+    return model, {**report(model, tr, te, target), "cv": cross_validate(df, target, features, cv, seed)}
 
 
 def report(model: ScoreModel, tr: pd.DataFrame, te: pd.DataFrame, target: str = "default_12m") -> dict:
