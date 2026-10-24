@@ -39,6 +39,7 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 FACTOR = 20 / math.log(2)
 BASE = 600
 MIN_COUNT = 30
+VERSION = 2  # версия признаков (2 - запас не выше 1×); модель другой версии Engine.load не загружает
 REF_RATE = 0.225  # опорная ставка платежа, годовых
 MIN_DSCR = 1.25  # как в config/credit_policy.json; Engine передаёт значение из политики
 L2 = 1.0  # слабый ridge для устойчивости; на тысячах решений почти не влияет
@@ -172,6 +173,7 @@ class ApprovalModel:
     n: int = 0
     ref_rate: float = REF_RATE
     min_dscr: float = MIN_DSCR
+    version: int = 0  # VERSION признаков, на которых обучена; 0 - пикл до номера версии
 
     def _columns(self, f: str) -> list:
         return [f"{f}={CATEGORIES[f][0][j]}" for j in self.steps.get(f, [])]
@@ -195,7 +197,8 @@ class ApprovalModel:
         counts = {f"{f}={c}": int((bins[f] == c).sum()) for f, (cats, _) in CATEGORIES.items() for c in cats}
         steps = {f: [j for j, c in enumerate(cats) if c != ref and counts[f"{f}={c}"] >= MIN_COUNT]
                  for f, (cats, ref) in CATEGORIES.items()}
-        m = cls(steps, tuple(continuous), counts=counts, n=int(keep.sum()), ref_rate=ref_rate, min_dscr=min_dscr)
+        m = cls(steps, tuple(continuous), counts=counts, n=int(keep.sum()), ref_rate=ref_rate, min_dscr=min_dscr,
+                version=VERSION)
         m.fill = {c: float(np.nan_to_num(_code(bins, f, j).mean()))
                   for f, js in steps.items() for j, c in zip(js, m._columns(f))}
         num = continuous_features(m._raw(d))
@@ -288,10 +291,12 @@ def _gini(y, p) -> float:
 
 def cross_validate(df: pd.DataFrame, y: pd.Series, k: int = 5, seed: int = 7, **kw) -> dict:
     """Gini по k стратифицированным фолдам всех решений: на обучающих фолдах, на отложенном фолде и на отложенном
-    фолде у модели только на категориях заявки - по значению на фолд."""
+    фолде у модели только на категориях заявки - по значению на фолд; k < 2 - без кросс-валидации (пусто)."""
     idx = y.index[y.notna()]
     yy = y[idx].astype(int)
     out = {"cv_gini_train": [], "cv_gini_test": [], "cv_gini_test_categories": []}
+    if k < 2:
+        return out
     for a, b in StratifiedKFold(k, shuffle=True, random_state=seed).split(idx, yy):
         tr, te = idx[a], idx[b]
         m = ApprovalModel.fit(df.loc[tr], y.loc[tr], **kw)

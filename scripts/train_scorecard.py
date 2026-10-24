@@ -49,13 +49,17 @@ def _md(df: pd.DataFrame, floatfmt=".4f") -> str:
 
 
 def _spread(values) -> str:
-    """Среднее ± стандартное отклонение по фолдам."""
+    """Среднее ± стандартное отклонение по оценённым фолдам; неоценённые (NaN) не в счёт, их число - в скобках."""
     v = np.asarray(values, float)
-    return f"{v.mean():.3f} ± {v.std():.3f}"
+    ok = v[~np.isnan(v)]
+    if not len(ok):
+        return "нет оценки"
+    note = "" if len(ok) == len(v) else f" (по {len(ok)} из {len(v)} фолдов)"
+    return f"{ok.mean():.3f} ± {ok.std():.3f}{note}"
 
 
 def _folds(values) -> str:
-    return ", ".join(f"{x:.3f}" for x in values)
+    return ", ".join("—" if np.isnan(x) else f"{x:.3f}" for x in np.asarray(values, float))
 
 
 def load_curves(data_dir: Path):

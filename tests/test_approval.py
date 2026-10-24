@@ -8,7 +8,8 @@ import pytest
 
 from scoring import synth
 from scoring.approval import (BASE, CATEGORIES, CONTINUOUS, FACTOR, LABELS, REF_RATE, SIGNS, ApprovalModel,
-                              approval_target, bin_application, cash_flow, monthly_payment, train_approval)
+                              approval_target, bin_application, cash_flow, cross_validate, monthly_payment,
+                              train_approval)
 from scoring.assess import assess
 from scoring.credit import load_policy
 from scoring.scorecard import train
@@ -19,7 +20,7 @@ warnings.filterwarnings("ignore")
 @pytest.fixture(scope="module")
 def fitted():
     df = synth.generate(15000, seed=31, asof=date(2026, 10, 22))
-    model, _ = train(df, seed=3)
+    model, _ = train(df, seed=3, cv=0)
     out = assess(df, model, load_policy())
     df = df.assign(pd=out.pd.to_numpy())
     y = approval_target(out, df.requested_amount)
@@ -159,7 +160,24 @@ def test_cross_validated_gini_comes_from_held_out_folds(fitted):
     noise = pd.Series((rng.random(len(y)) < 0.3).astype(float), index=y.index).where(y.notna())
     _, r = train_approval(df, noise, seed=3)
     assert abs(np.mean(r["cv_gini_test"])) < 0.05
-    assert np.mean(r["cv_gini_train"]) > np.mean(r["cv_gini_test"])  # на своих фолдах шум «объясняется»
+
+
+def test_approval_folds_never_train_on_their_held_out_decisions(fitted, monkeypatch):
+    df, _, y, _, _ = fitted
+    seen, real = [], ApprovalModel.fit.__func__
+
+    def spy(cls, d, yy, **kw):  # какие решения видит каждая подгонка
+        seen.append(d.index)
+        return real(cls, d, yy, **kw)
+
+    monkeypatch.setattr(ApprovalModel, "fit", classmethod(spy))
+    r = cross_validate(df, y, k=5, seed=3)
+    idx = y.index[y.notna()]
+    assert len(seen) == 10 and all(seen[i].equals(seen[i + 1]) for i in range(0, 10, 2))  # полная и «категории»
+    held = [idx.difference(ix) for ix in seen[::2]]
+    assert sum(map(len, held)) == len(idx) == len(set().union(*map(set, held)))  # фолды не пересекаются, покрывают всё
+    assert len(r["cv_gini_test"]) == 5
+    assert cross_validate(df, y, k=0) == {"cv_gini_train": [], "cv_gini_test": [], "cv_gini_test_categories": []}
 
 
 def test_cash_flow_multiples_match_a_hand_calculation():

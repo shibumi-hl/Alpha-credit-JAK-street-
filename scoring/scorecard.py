@@ -115,22 +115,31 @@ def _fit(tr: pd.DataFrame, target: str, features, strict: bool = True) -> tuple[
 def cross_validate(df: pd.DataFrame, target: str = "default_12m", features=FEATURES, k: int = 5,
                    seed: int = 7) -> pd.DataFrame:
     """Gini по k стратифицированным фолдам. Отбор факторов, биннинг и регрессия - заново на каждом обучающем фолде,
-    так что отложенный фолд не участвует ни в чём; по строке на фолд."""
+    так что отложенный фолд не участвует ни в чём; по строке на фолд. Фолд, где по IV прошло меньше MIN_FACTORS
+    факторов, не оценивается (Gini NaN): train() такую модель не принял бы. k < 2 - без кросс-валидации (пусто);
+    дефолтов или компаний без дефолта меньше k - ValueError."""
+    cols = ["fold", "n_test", "dr_test", "factors", "gini_train", "gini_test"]
+    if k < 2:
+        return pd.DataFrame(columns=cols)
+    counts = df[target].value_counts()
+    if len(counts) < 2 or counts.min() < k:
+        raise ValueError(f"для {k} фолдов нужно не меньше {k} дефолтов и {k} компаний без дефолта, а их "
+                         f"{int(counts.get(1, 0))} и {int(counts.get(0, 0))}")
     rows = []
     for i, (a, b) in enumerate(StratifiedKFold(k, shuffle=True, random_state=seed).split(df, df[target]), 1):
         tr, te = df.iloc[a], df.iloc[b]
         sc, factors, _ = _fit(tr, target, features, strict=False)
-        g = (lambda d: 2 * roc_auc_score(d[target], sc.predict_proba(d[factors])[:, 1]) - 1) if sc else \
-            (lambda d: np.nan)  # без факторов ранжировать нечем
+        g = (lambda d: 2 * roc_auc_score(d[target], sc.predict_proba(d[factors])[:, 1]) - 1) \
+            if sc is not None and len(factors) >= MIN_FACTORS else (lambda d: np.nan)
         rows.append({"fold": i, "n_test": len(te), "dr_test": float(te[target].mean()), "factors": len(factors),
                      "gini_train": g(tr), "gini_test": g(te)})
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows, columns=cols)
 
 
 def train(df: pd.DataFrame, target: str = "default_12m", features=FEATURES, seed: int = 7, test_size: float = 0.3,
           cv: int = 5):
     """Обучение на 70% и отчёт на 30% (стратифицировано), плюс Gini по cv фолдам всей выборки (cross_validate) -
-    без удачи одного разбиения. ValueError, если факторов с IV ≥ 0.02 меньше 8."""
+    без удачи одного разбиения; cv < 2 - без неё. ValueError, если факторов с IV ≥ 0.02 меньше 8."""
     tr, te = train_test_split(df, test_size=test_size, stratify=df[target], random_state=seed)
     sc, factors, iv = _fit(tr, target, features)
     t = sc.table("detailed")
