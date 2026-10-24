@@ -22,6 +22,7 @@ import warnings
 from datetime import date
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -45,6 +46,16 @@ def _md(df: pd.DataFrame, floatfmt=".4f") -> str:
         return f"{v:{floatfmt}}" if isinstance(v, float) else str(v)
     head = ["| " + " | ".join(map(str, df.columns)) + " |", "|" + "---|" * len(df.columns)]
     return "\n".join(head + ["| " + " | ".join(fmt(v) for v in r) + " |" for r in df.itertuples(index=False)])
+
+
+def _spread(values) -> str:
+    """Среднее ± стандартное отклонение по фолдам."""
+    v = np.asarray(values, float)
+    return f"{v.mean():.3f} ± {v.std():.3f}"
+
+
+def _folds(values) -> str:
+    return ", ".join(f"{x:.3f}" for x in values)
 
 
 def load_curves(data_dir: Path):
@@ -131,30 +142,33 @@ def write_report(path: Path, fit: dict, src: str, capital: dict, real: dict | No
     t = rep["table"].copy()
     t["Bin"] = t["Bin"].astype(str)
     at = fit["approval_table"].copy()
-    ar = fit["approval"]
+    ar, cv = fit["approval"], rep["cv"]
     lines = [
         f"# Скоринг МСБ - {date.today().isoformat()}, {title}", "",
         f"Выборка: {src}; train {rep['n_train']:,} / test {rep['n_test']:,}, "
         f"доля дефолтов {rep['dr_train']:.2%} / {rep['dr_test']:.2%}.", "",
         "## Модель 1a: PD-скоркарта (риск дефолта)", "",
-        f"- Gini train {rep['gini_train']:.3f}, test {rep['gini_test']:.3f}; AUC test {rep['auc_test']:.3f}; "
-        f"KS test {rep['ks_test']:.3f}",
-        f"- Средний PD на test {rep['pd_mean_test']:.2%} при наблюдаемой доле {rep['dr_test']:.2%}",
+        f"- Gini, {len(cv)} фолдов (стратифицировано, отбор факторов и биннинг заново на каждом): test "
+        f"{_spread(cv.gini_test)}, train {cv.gini_train.mean():.3f}; по фолдам {_folds(cv.gini_test)}",
+        f"- Отложенные 30% (на них калибровка PD и классы риска): KS {rep['ks_test']:.3f}; средний PD "
+        f"{rep['pd_mean_test']:.2%} при наблюдаемой доле {rep['dr_test']:.2%}",
         f"- Факторов в модели: {len(rep['factors'])} - {', '.join(rep['factors'])}", "",
         "### Классы риска (test)", "", _md(rep["classes"]), "",
         "## Модель 1b: вероятность одобрения (политика)", "",
         f"Решений без дозапросов и стоп-факторов {fit['approval_n']:,}, доля одобренных {fit['approval_rate']:.1%}; "
         f"обучение на {ar['n_train']:,} (70%), проверка на отложенных {ar['n_test']:,} (30%, стратифицировано). "
         "Признаки: категории заявки, PD скоркарты, запас денежного потока = (EBIT / min DSCR − обслуживание долга) / "
-        f"годовой платёж и ln(оборот / платёж); платёж - аннуитет по опорной ставке {REF_RATE:.1%}. Знаки ограничены "
+        f"годовой платёж, не выше 1× (дальше DSCR-лимит не режет), и ln(оборот / платёж); платёж - аннуитет по "
+        f"опорной ставке {REF_RATE:.1%}. Знаки ограничены "
         "смыслом (залог, РКО, обороты в банке, маркетплейс, гарантия и денежный поток не снижают шанс; PD, сумма, "
         "просрочки и молодость бизнеса не повышают), упорядоченные категории монотонны; «ограничение знака» - "
         "данные тянули против смысла, эффект обнулён. Нет признака (нет БКИ, отчётности) - средний вклад по "
         "обучению (soft-режим). Балл = 600 + (20/ln2)·logit(p); +20 баллов - вдвое выше шансы.", "",
-        f"- Gini train {ar['gini_train']:.3f}, test {ar['gini_test']:.3f}; только категории заявки (без PD и "
-        f"денежного потока) - test {ar['gini_test_categories']:.3f}",
-        f"- Brier test {ar['brier_test']:.3f} (константа {ar['brier_const']:.3f}), LogLoss test {ar['logloss_test']:.3f}; "
-        f"средний прогноз {ar['mean_p_test']:.1%} при доле одобренных {ar['rate_test']:.1%}", "",
+        f"- Gini, {len(ar['cv_gini_test'])} фолдов всех решений (стратифицировано): test {_spread(ar['cv_gini_test'])}, "
+        f"train {np.mean(ar['cv_gini_train']):.3f}; по фолдам {_folds(ar['cv_gini_test'])}; только категории заявки "
+        f"(без PD и денежного потока) - test {_spread(ar['cv_gini_test_categories'])}",
+        f"- Отложенные 30%: Brier {ar['brier_test']:.3f} (константа {ar['brier_const']:.3f}), LogLoss "
+        f"{ar['logloss_test']:.3f}; средний прогноз {ar['mean_p_test']:.1%} при доле одобренных {ar['rate_test']:.1%}", "",
         "### Калибровка по классам риска (test)", "", _md(ar["classes"], ".3f"), "",
         "### Баллы одобрения", "", _md(at, ".3f"), "",
         "## Модель 2: ставка (risk-based pricing), % годовых, среднее по предложениям", "",
@@ -193,8 +207,9 @@ def run(df: pd.DataFrame, pricing: dict, a, src: str) -> Path:
     rp = a.report_dir / f"scorecard_{date.today().isoformat()}_{approach}.md"
     write_report(rp, fit, src, pricing["capital"], real_check(df, engine.scorecard, a.data_dir))
     rep = fit["scorecard"]
-    print(f"[{approach}] PD: Gini test {rep['gini_test']:.3f}, KS {rep['ks_test']:.3f}, факторов {len(rep['factors'])}; "
-          f"одобрение: {fit['approval_n']:,} решений, Gini test {fit['approval']['gini_test']:.3f}; средняя ставка {out.rate.mean():.1%}, ПСК {out.all_in.mean():.1%}; "
+    print(f"[{approach}] PD: Gini CV {_spread(rep['cv'].gini_test)}, KS {rep['ks_test']:.3f}, факторов "
+          f"{len(rep['factors'])}; одобрение: {fit['approval_n']:,} решений, Gini CV "
+          f"{_spread(fit['approval']['cv_gini_test'])}; средняя ставка {out.rate.mean():.1%}, ПСК {out.all_in.mean():.1%}; "
           f"исходы: {out.outcome.value_counts().to_dict()} → {rp}")
     return rp
 

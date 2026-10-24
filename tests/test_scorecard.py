@@ -25,6 +25,15 @@ def test_model_uses_8_to_12_factors_and_discriminates(fitted):
     assert set(rep["iv"].name) >= set(model.factors)
 
 
+def test_cross_validation_scores_each_company_once_out_of_fold(fitted):
+    df, _, rep = fitted
+    cv = rep["cv"]
+    assert list(cv.fold) == [1, 2, 3, 4, 5] and cv.n_test.sum() == len(df)  # каждая компания - ровно в одном тесте
+    assert cv.gini_test.mean() < cv.gini_train.mean()  # вне фолда хуже, чем на обучении
+    assert cv.gini_test.mean() == pytest.approx(rep["gini_test"], abs=0.1)
+    assert cv.dr_test.between(0.03, 0.07).all()  # фолды стратифицированы по дефолту
+
+
 def test_points_sum_to_score_and_higher_score_is_safer(fitted):
     df, model, _ = fitted
     s = model.score(df.head(2000))
