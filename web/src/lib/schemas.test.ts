@@ -30,3 +30,19 @@ describe('API contract', () => {
     expect(() => EvaluationSchema.parse({ ...evaluation, outcome: 'MAYBE' })).toThrow();
   });
 });
+
+import appFixture from '../test/fixtures/application.json';
+import { ApplicationSchema as AppS } from './schemas';
+
+describe('conveyor contract', () => {
+  it('parses a sample Application and keeps unknown fields', () => {
+    const a = AppS.parse(appFixture) as Record<string, unknown> & { steps: unknown[]; actions: string[] };
+    expect(a.steps).toHaveLength(6);
+    expect(a.actions).toEqual(['sign', 'withdraw']);
+    expect(a.extra_field).toBe(1);
+  });
+  it('rejects an unknown step state', () => {
+    const bad = { ...appFixture, steps: [{ status: 'X', label: 'x', state: 'weird' }] };
+    expect(AppS.safeParse(bad).success).toBe(false);
+  });
+});
