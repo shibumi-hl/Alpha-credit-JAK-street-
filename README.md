@@ -26,6 +26,8 @@ py -m pytest -q
 
 ## Данные (в `data/`, в git не попадают)
 
+Обученный движок лежит в git отдельно — `models/engine.pkl` (описание и SHA-256 в `models/README.md`): песочница и проверки поднимаются из чистого клона без выгрузки ФНС.
+
 ```
 py scripts/load_moex_gcurve.py                   # G-кривая Мосбиржи (фондирование)
 py scripts/load_fns_opendata.py --sample 20000   # вселенная ЮЛ и выборка (~180 МБ архивов ФНС)
@@ -111,7 +113,7 @@ py scripts/score_company.py --json app.json --whatif --format json    # отве
 
 ```
 py scripts/check_personas.py                 # исходы демо-компаний и числа Марины из защиты на data/scoring/engine.pkl
-py -m uvicorn --factory api.app:create_app --port 3100   # API (ENGINE_PATH - путь к engine.pkl), Swagger /api/docs
+py -m uvicorn --factory api.app:create_app --port 3100   # API (ENGINE_PATH, иначе data/ или models/engine.pkl), Swagger /api/docs
 cd web; npm ci; npm run dev                  # http://localhost:5173, /api проксируется на 3100
 cd web; npm test; npm run build              # тесты и сборка фронта
 cd web; npx playwright test                  # золотой путь Марины и все демо-компании (нужны API и Vite)
@@ -135,6 +137,7 @@ api/       HTTP API песочницы: контракт ответов, дем�
 demo/      вымышленные демо-компании песочницы
 web/       фронт песочницы (React + Vite), e2e на Playwright
 deploy/    настройка VPS, systemd, Caddy, точные версии для сервера
+models/    обученный движок (engine.pkl) для песочницы и команды
 ```
 
 ## Ограничения
