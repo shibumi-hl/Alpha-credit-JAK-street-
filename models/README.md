@@ -2,7 +2,7 @@
 
 `engine.pkl` — все модели движка одним файлом (`scoring.whatif.Engine`): PD-скоркарта, модель шанса одобрения,
 кредитная политика, параметры цены и G-кривая Мосбиржи. На нём работает песочница кредита
-(https://credit.161-104-46-48.sslip.io) и `scripts/check_personas.py`.
+(https://alfahack.artsch.dev) и `scripts/check_personas.py`.
 
 | | |
 |---|---|

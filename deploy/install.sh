@@ -4,6 +4,7 @@ set -euo pipefail
 
 NEXT=/opt/alfa-credit/next
 DOMAIN="$(cat /etc/alfa-credit/domain)"
+ALIASES="$(cat /etc/alfa-credit/aliases 2>/dev/null || true)"  # прежние адреса: редирект на DOMAIN
 SITE=/etc/caddy/sites/alfa-credit.caddy
 
 # зависимости - только когда изменился список точных версий
@@ -24,6 +25,9 @@ install -m 644 "$NEXT/deploy/alfa-credit.service" /etc/systemd/system/alfa-credi
 # сайт Caddy: при ошибке в конфиге возвращаем прошлый файл, чтобы не сломать перезагрузку Caddy для Аны
 [ -f "$SITE" ] && cp "$SITE" "$SITE.bak"
 sed "s/{DOMAIN}/$DOMAIN/g" "$NEXT/deploy/alfa-credit.caddy" > "$SITE"
+if [ -n "$ALIASES" ]; then  # ссылки и QR со слайдов на старый адрес ведут на основной домен
+  printf '\n%s {\n\tredir https://%s{uri} permanent\n}\n' "$ALIASES" "$DOMAIN" >> "$SITE"
+fi
 if ! caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null; then
   if [ -f "$SITE.bak" ]; then mv "$SITE.bak" "$SITE"; else rm -f "$SITE"; fi
   echo "caddy config is invalid, site file restored" >&2

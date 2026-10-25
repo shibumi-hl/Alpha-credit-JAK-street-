@@ -3,7 +3,8 @@
 # ssh, установка, проверка по HTTPS.
 #
 #   bash scripts/deploy.sh           # DEPLOY_HOST, DEPLOY_DOMAIN, DEPLOY_KEY, ENGINE_PATH - из окружения или .env
-#   bash scripts/deploy.sh --setup   # первый раз: python3-venv, пользователь, каталоги, import в Caddyfile
+#   bash scripts/deploy.sh --setup   # первый раз или смена домена: python3-venv, пользователь, каталоги, import в
+#                                    # Caddyfile, домен; DEPLOY_ALIASES - прежние адреса, они редиректят на домен
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if [ -f .env ]; then set -a; . ./.env; set +a; fi
@@ -19,7 +20,7 @@ SSH=(ssh -i "$KEY" -o IdentitiesOnly=yes -o BatchMode=yes "$DEPLOY_HOST")
 
 if [ "${1:-}" = "--setup" ]; then
   echo "→ настройка $DEPLOY_HOST для $DEPLOY_DOMAIN"
-  "${SSH[@]}" "bash -s -- $DEPLOY_DOMAIN" < deploy/setup.sh
+  "${SSH[@]}" "bash -s -- '$DEPLOY_DOMAIN' '${DEPLOY_ALIASES:-}'" < deploy/setup.sh
 fi
 
 echo "→ сборка фронта"
