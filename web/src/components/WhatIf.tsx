@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { pp, rub } from '../lib/format';
+import { scenarioOrder } from '../lib/hints';
 import type { Evaluation, Scenario, WhatIf as WhatIfData } from '../lib/schemas';
 
 export const SCENARIO_MIME = 'application/x-alfa-scenario';
@@ -11,13 +12,10 @@ function outcomeShort(s: Scenario): string {
   return 'Не сможем';
 }
 
-const order = (a: Scenario, b: Scenario) =>
-  b.delta_approval_pp - a.delta_approval_pp || (a.delta_rate_pp ?? 0) - (b.delta_rate_pp ?? 0);
-
 /** «Что если» (ТЗ §4.7): наведение — призрак, «Применить» или перетаскивание в условия — сценарий в заявку. */
 export function WhatIf({ w, base, onHover, onApply }: { w: WhatIfData | undefined; base: Evaluation; onHover(s: Scenario | null): void; onApply(s: Scenario): void }) {
   const [dragging, setDragging] = useState<string | null>(null);
-  const list = [...(w?.scenarios ?? [])].sort(order);
+  const list = [...(w?.scenarios ?? [])].sort(scenarioOrder);
   return (
     <section className="card" id="whatif" aria-labelledby="whatif-title">
       <div className="card-head">

@@ -56,7 +56,7 @@ export function Header({ personas, persona, onPick }: { personas: PersonaCard[] 
       <div style={{ position: 'relative' }} ref={box}>
         <button type="button" className="btn btn-secondary t-label" aria-expanded={open} onClick={() => setOpen(!open)}>
           <Building2 size={18} strokeWidth={1.75} aria-hidden />
-          Факты компании
+          Факты<span className="hide-mobile"> компании</span>
           <ChevronDown size={16} aria-hidden />
         </button>
         {open && persona && (

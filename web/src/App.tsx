@@ -252,8 +252,7 @@ export function App() {
         <>
           <div className="sheet-backdrop" onClick={() => setSheet(false)} />
           <div className="sheet" role="dialog" aria-modal="true" aria-label="Условия заявки">
-            <div className="lever-row" style={{ marginBottom: 8 }}>
-              <span className="t-title">Условия</span>
+            <div className="lever-row" style={{ marginBottom: 8, justifyContent: 'flex-end' }}>
               <button type="button" className="btn btn-secondary t-label" onClick={() => setSheet(false)}>
                 Готово
               </button>

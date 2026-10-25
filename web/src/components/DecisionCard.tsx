@@ -61,7 +61,7 @@ export function DecisionCard({ e, meta, hint, thinking, notice, onAction }: Prop
         )}
         <p className="t-caption muted" style={{ margin: 0 }}>
           Предварительная оценка, не решение банка
-          {e.approval_mode === 'soft' && ` · без данных: ${e.approval_imputed_labels.join(', ').toLowerCase()}`}
+          {e.approval_mode === 'soft' && ` · без данных: ${e.approval_imputed_labels.join(', ').replace(/^./, (c) => c.toLowerCase())}`}
         </p>
       </div>
     </section>

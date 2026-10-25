@@ -779,6 +779,16 @@ input {
   .page {
     padding: 0 16px 96px;
   }
+  .brand {
+    flex-basis: 100%;
+  }
+  .topbar .select {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .hide-mobile {
+    display: none;
+  }
   .t-kpi {
     font-size: 34px;
     line-height: 40px;
