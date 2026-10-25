@@ -54,9 +54,9 @@ export function CurveCard({ metric, curve, ghost, product, amount, drag, step, o
 
   const [y0, y1] = useMemo(() => {
     if (metric === 'approval' || !pts.length) return [0, 1];
-    const vs = pts.flatMap((p) => [p.rate_requested, ...(p.all_in != null && p.offered_amount === p.x ? [p.all_in] : [])]);
+    const vs = pts.flatMap((p) => [p.rate_requested, ...(p.all_in != null && p.offered_amount === p.x && p.offered_product === product ? [p.all_in] : [])]);
     return [Math.floor(Math.min(...vs) * 100 - 1) / 100, Math.ceil(Math.max(...vs) * 100 + 1) / 100];
-  }, [metric, pts]);
+  }, [metric, pts, product]);
   const py = (v: number) => M.t + (1 - (v - y0) / (y1 - y0)) * (H - M.t - M.b);
 
   const path = (points: Point[]) => {
@@ -75,12 +75,12 @@ export function CurveCard({ metric, curve, ghost, product, amount, drag, step, o
     let d = '';
     let open = false;
     for (const p of pts) {
-      const ok = p.all_in != null && p.offered_amount === p.x;
+      const ok = p.all_in != null && p.offered_amount === p.x && p.offered_product === product; // ПСК только своего продукта
       if (ok) d += `${open ? 'L' : 'M'}${ax.px(p.x).toFixed(1)},${py(p.all_in!).toFixed(1)}`;
       open = ok;
     }
     return d;
-  }, [metric, pts, w, y0, y1]);
+  }, [metric, pts, w, y0, y1, product]);
 
   const cur = local ?? drag ?? amount;
   const inRange = pts.length > 1 && cur >= lo && cur <= hi;

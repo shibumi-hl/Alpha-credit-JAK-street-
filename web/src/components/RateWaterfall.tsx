@@ -43,7 +43,7 @@ function Fall({ p }: { p: Pricing }) {
     acc += v;
     return row;
   });
-  rows.push({ label: 'Скидки', from: acc - p.discounts, v: p.discounts, kind: 'discount' });
+  if (p.discounts > 0) rows.push({ label: 'Скидки', from: acc - p.discounts, v: p.discounts, kind: 'discount' });
   rows.push({ label: 'Ставка', from: 0, v: p.rate, kind: 'total' });
   if (p.all_in != null) rows.push({ label: 'ПСК: + комиссия и страховка', from: p.rate, v: p.all_in - p.rate, kind: 'psk' });
   return (
