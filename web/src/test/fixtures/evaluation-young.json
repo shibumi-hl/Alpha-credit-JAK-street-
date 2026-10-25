@@ -1,0 +1,211 @@
+{
+ "inn": "0030000030",
+ "score": 589.7342849233434,
+ "pd": 0.025095651145770552,
+ "risk_class": 4,
+ "approval_probability": 0.4690863829071606,
+ "approval_score": 596.4275295343687,
+ "approval_mode": "full",
+ "approval_imputed": [],
+ "outcome": "COUNTER",
+ "product": "credit_line",
+ "offered_product": "card",
+ "requested_amount": 3000000.0,
+ "offered_amount": 1000000.0,
+ "limit": 1000000,
+ "route": {
+  "from": "credit_line",
+  "to": "card",
+  "reasons": [
+   {
+    "code": "E01",
+    "category": "бизнес слишком молодой для продукта: нужно от 12 мес."
+   }
+  ]
+ },
+ "pricing": {
+  "funding": 0.14693774205696852,
+  "el": 0.018821738359327912,
+  "capital": 0.012561425292641105,
+  "opex": 0.015,
+  "margin": 0.02,
+  "discounts": 0.0,
+  "rate": 0.21332090570893755,
+  "lgd": 0.75,
+  "risk_weight": 1.015682619365903,
+  "irb_class": "retail",
+  "lgd_capital": 0.75,
+  "fee": 0.0,
+  "insurance_rate": 0.0,
+  "curve_date": "2026-10-22",
+  "all_in": 0.21332090570892914
+ },
+ "stop_factors": [],
+ "reasons": [
+  {
+   "code": "R02",
+   "category": "короткая история оборотов",
+   "loss": 26.22,
+   "factors": [
+    "turnover_months"
+   ]
+  },
+  {
+   "code": "R10",
+   "category": "заявка без залога",
+   "loss": 9.53,
+   "factors": [
+    "product"
+   ]
+  },
+  {
+   "code": "R06",
+   "category": "небольшой или падающий оборот",
+   "loss": 5.84,
+   "factors": [
+    "revenue"
+   ]
+  }
+ ],
+ "requests": [],
+ "approval_explain": [
+  {
+   "feature": "cash_cover",
+   "label": "Запас денежного потока к платежу",
+   "category": "0.52× платежа",
+   "category_label": "0,52× платежа",
+   "points": 157.80803346493792
+  },
+  {
+   "feature": "product",
+   "label": "Продукт",
+   "category": "credit_line",
+   "category_label": "кредитная линия",
+   "points": -17.050972096409375
+  },
+  {
+   "feature": "logit_pd",
+   "label": "PD скоркарты",
+   "category": "2.5%",
+   "category_label": "2,5%",
+   "points": -6.873257888868155
+  },
+  {
+   "feature": "ln_turnover_to_payment",
+   "label": "Среднемесячный оборот к платежу",
+   "category": "4.2× платежа",
+   "category_label": "4,2× платежа",
+   "points": -4.584456727380646
+  },
+  {
+   "feature": "business_age",
+   "label": "Возраст бизнеса, мес.",
+   "category": "<12",
+   "category_label": "до года",
+   "points": 0.0
+  },
+  {
+   "feature": "rko",
+   "label": "РКО в банке",
+   "category": "нет",
+   "category_label": "нет",
+   "points": 0.0
+  },
+  {
+   "feature": "bank_turnover",
+   "label": "Обороты в банке / лимит",
+   "category": "<40%",
+   "category_label": "меньше 40%",
+   "points": 0.0
+  },
+  {
+   "feature": "amount_share",
+   "label": "Сумма / годовая выручка",
+   "category": "10-30%",
+   "category_label": "10–30%",
+   "points": 0.0
+  },
+  {
+   "feature": "marketplace",
+   "label": "Селлер маркетплейса с данными",
+   "category": "нет",
+   "category_label": "нет",
+   "points": 0.0
+  },
+  {
+   "feature": "guarantee",
+   "label": "Гарантия Корпорации МСП",
+   "category": "нет",
+   "category_label": "нет",
+   "points": 0.0
+  },
+  {
+   "feature": "bki_overdue",
+   "label": "Просрочки в БКИ за 12 мес.",
+   "category": "нет",
+   "category_label": "нет",
+   "points": 0.0
+  }
+ ],
+ "approval_imputed_labels": [],
+ "requested_term_m": 12,
+ "monthly_payment": 93273.23016134322,
+ "products": [
+  {
+   "product": "secured",
+   "label": "залоговый кредит",
+   "available": true,
+   "reasons": []
+  },
+  {
+   "product": "express",
+   "label": "экспресс-кредит без залога",
+   "available": false,
+   "reasons": [
+    {
+     "code": "E01",
+     "category": "бизнес слишком молодой для продукта: нужно от 9 мес."
+    }
+   ]
+  },
+  {
+   "product": "overdraft",
+   "label": "овердрафт",
+   "available": false,
+   "reasons": [
+    {
+     "code": "E02",
+     "category": "нужен расчётный счёт в банке"
+    }
+   ]
+  },
+  {
+   "product": "credit_line",
+   "label": "кредитная линия",
+   "available": false,
+   "reasons": [
+    {
+     "code": "E01",
+     "category": "бизнес слишком молодой для продукта: нужно от 12 мес."
+    }
+   ]
+  },
+  {
+   "product": "seller_credit",
+   "label": "кредит селлерам",
+   "available": false,
+   "reasons": [
+    {
+     "code": "E03",
+     "category": "нужен магазин на маркетплейсе с переданными данными"
+    }
+   ]
+  },
+  {
+   "product": "card",
+   "label": "бизнес-карта",
+   "available": true,
+   "reasons": []
+  }
+ ]
+}

@@ -1,0 +1,221 @@
+{
+ "products": [
+  {
+   "product": "secured",
+   "label": "залоговый кредит",
+   "min_amount": 500000,
+   "max_amount": 300000000,
+   "min_age_months": 6,
+   "requires": [],
+   "revolving": false
+  },
+  {
+   "product": "express",
+   "label": "экспресс-кредит без залога",
+   "min_amount": 300000,
+   "max_amount": 10000000,
+   "min_age_months": 9,
+   "requires": [],
+   "revolving": false
+  },
+  {
+   "product": "overdraft",
+   "label": "овердрафт",
+   "min_amount": 100000,
+   "max_amount": 30000000,
+   "min_age_months": 6,
+   "requires": [
+    "has_rko"
+   ],
+   "revolving": true
+  },
+  {
+   "product": "credit_line",
+   "label": "кредитная линия",
+   "min_amount": 500000,
+   "max_amount": 300000000,
+   "min_age_months": 12,
+   "requires": [],
+   "revolving": false
+  },
+  {
+   "product": "seller_credit",
+   "label": "кредит селлерам",
+   "min_amount": 100000,
+   "max_amount": 5000000,
+   "min_age_months": 3,
+   "requires": [
+    "marketplace"
+   ],
+   "revolving": false
+  },
+  {
+   "product": "card",
+   "label": "бизнес-карта",
+   "min_amount": 50000,
+   "max_amount": 1000000,
+   "min_age_months": 3,
+   "requires": [],
+   "revolving": true
+  }
+ ],
+ "codes": [
+  {
+   "code": "S01",
+   "group": "S",
+   "category": "текущая просрочка более 30 дней"
+  },
+  {
+   "code": "S02",
+   "group": "S",
+   "category": "просрочка более 90 дней за последние 12 месяцев"
+  },
+  {
+   "code": "S03",
+   "group": "S",
+   "category": "налоговая задолженность выше 5% оборота"
+  },
+  {
+   "code": "S04",
+   "group": "S",
+   "category": "компания зарегистрирована менее 3 месяцев назад"
+  },
+  {
+   "code": "S05",
+   "group": "S",
+   "category": "высокий риск дефолта (класс 7)"
+  },
+  {
+   "code": "S06",
+   "group": "S",
+   "category": "вид деятельности вне кредитной политики"
+  },
+  {
+   "code": "S07",
+   "group": "S",
+   "category": "компания не действующая (ликвидация, реорганизация, банкротство)"
+  },
+  {
+   "code": "E01",
+   "group": "E",
+   "category": "бизнес слишком молодой для продукта"
+  },
+  {
+   "code": "E02",
+   "group": "E",
+   "category": "нужен расчётный счёт в банке"
+  },
+  {
+   "code": "E03",
+   "group": "E",
+   "category": "нужен магазин на маркетплейсе с переданными данными"
+  },
+  {
+   "code": "L01",
+   "group": "L",
+   "category": "денежного потока не хватает даже на минимальную сумму"
+  },
+  {
+   "code": "L02",
+   "group": "L",
+   "category": "денежного потока с запасом DSCR ≥ 1,25 хватает на платёж только по этой сумме"
+  },
+  {
+   "code": "L03",
+   "group": "L",
+   "category": "сумма ограничена долей годового оборота для вашего класса риска"
+  },
+  {
+   "code": "L04",
+   "group": "L",
+   "category": "это максимальная сумма продукта"
+  },
+  {
+   "code": "L05",
+   "group": "L",
+   "category": "овердрафт ограничен оборотами по счёту в банке"
+  },
+  {
+   "code": "L06",
+   "group": "L",
+   "category": "запрошенная сумма меньше минимальной для продукта"
+  },
+  {
+   "code": "R01",
+   "group": "R",
+   "category": "высокая долговая нагрузка"
+  },
+  {
+   "code": "R02",
+   "group": "R",
+   "category": "короткая история оборотов"
+  },
+  {
+   "code": "R03",
+   "group": "R",
+   "category": "просрочки в кредитной истории"
+  },
+  {
+   "code": "R04",
+   "group": "R",
+   "category": "налоговая задолженность"
+  },
+  {
+   "code": "R05",
+   "group": "R",
+   "category": "высокая сезонность выручки"
+  },
+  {
+   "code": "R06",
+   "group": "R",
+   "category": "небольшой или падающий оборот"
+  },
+  {
+   "code": "R07",
+   "group": "R",
+   "category": "недостаточный денежный поток для обслуживания долга"
+  },
+  {
+   "code": "R08",
+   "group": "R",
+   "category": "отраслевой риск"
+  },
+  {
+   "code": "R09",
+   "group": "R",
+   "category": "слабая структура капитала"
+  },
+  {
+   "code": "R10",
+   "group": "R",
+   "category": "заявка без залога"
+  },
+  {
+   "code": "R11",
+   "group": "R",
+   "category": "нет оборотов и данных о бизнесе в банке"
+  },
+  {
+   "code": "R12",
+   "group": "R",
+   "category": "сумма велика относительно оборота"
+  }
+ ],
+ "features": {
+  "product": "Продукт",
+  "business_age": "Возраст бизнеса, мес.",
+  "rko": "РКО в банке",
+  "bank_turnover": "Обороты в банке / лимит",
+  "amount_share": "Сумма / годовая выручка",
+  "marketplace": "Селлер маркетплейса с данными",
+  "guarantee": "Гарантия Корпорации МСП",
+  "bki_overdue": "Просрочки в БКИ за 12 мес.",
+  "logit_pd": "PD скоркарты",
+  "cash_cover": "Запас денежного потока к платежу",
+  "ln_turnover_to_payment": "Среднемесячный оборот к платежу"
+ },
+ "min_dscr": 1.25,
+ "round_to": 10000,
+ "asof": "2026-10-25",
+ "pricing_note": "Иллюстративные допущения для risk-based pricing, не ставки конкретного банка"
+}

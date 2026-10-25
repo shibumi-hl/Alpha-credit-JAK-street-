@@ -1,0 +1,188 @@
+{
+ "inn": "0020000023",
+ "score": 618.3373967894593,
+ "pd": 0.008751850453451214,
+ "risk_class": 2,
+ "approval_probability": 0.9494534764302497,
+ "approval_score": 684.6282706574857,
+ "approval_mode": "full",
+ "approval_imputed": [],
+ "outcome": "APPROVE",
+ "product": "secured",
+ "offered_product": "secured",
+ "requested_amount": 15000000.0,
+ "offered_amount": 15000000.0,
+ "limit": 41620000,
+ "route": null,
+ "pricing": {
+  "funding": 0.1606556999601293,
+  "el": 0.003063147658707925,
+  "capital": 0.003597832517740293,
+  "opex": 0.010333333333333333,
+  "margin": 0.02,
+  "discounts": 0.02,
+  "rate": 0.17765001346991086,
+  "lgd": 0.35,
+  "risk_weight": 0.3355775089676237,
+  "irb_class": "retail",
+  "lgd_capital": 0.35,
+  "fee": 0.01,
+  "insurance_rate": 0.015,
+  "curve_date": "2026-10-22",
+  "all_in": 0.21265159901107245
+ },
+ "stop_factors": [],
+ "reasons": [
+  {
+   "code": "R01",
+   "category": "высокая долговая нагрузка",
+   "loss": 9.72,
+   "factors": [
+    "debt_to_ebit",
+    "debt_to_revenue"
+   ]
+  },
+  {
+   "code": "R06",
+   "category": "небольшой или падающий оборот",
+   "loss": 2.13,
+   "factors": [
+    "revenue"
+   ]
+  },
+  {
+   "code": "R07",
+   "category": "недостаточный денежный поток для обслуживания долга",
+   "loss": 2.04,
+   "factors": [
+    "dscr"
+   ]
+  }
+ ],
+ "requests": [],
+ "approval_explain": [
+  {
+   "feature": "cash_cover",
+   "label": "Запас денежного потока к платежу",
+   "category": "2.77× платежа",
+   "category_label": "2,77× платежа",
+   "points": 196.95043359360778
+  },
+  {
+   "feature": "logit_pd",
+   "label": "PD скоркарты",
+   "category": "0.9%",
+   "category_label": "0,9%",
+   "points": 18.374706050921695
+  },
+  {
+   "feature": "ln_turnover_to_payment",
+   "label": "Среднемесячный оборот к платежу",
+   "category": "33.9× платежа",
+   "category_label": "33,9× платежа",
+   "points": 2.014189074318922
+  },
+  {
+   "feature": "bank_turnover",
+   "label": "Обороты в банке / лимит",
+   "category": "40-100%",
+   "category_label": "40–100%",
+   "points": 0.1607591565483844
+  },
+  {
+   "feature": "product",
+   "label": "Продукт",
+   "category": "secured",
+   "category_label": "залоговый кредит",
+   "points": 0.0
+  },
+  {
+   "feature": "business_age",
+   "label": "Возраст бизнеса, мес.",
+   "category": "120+",
+   "category_label": "больше 10 лет",
+   "points": 0.0
+  },
+  {
+   "feature": "rko",
+   "label": "РКО в банке",
+   "category": "да",
+   "category_label": "да",
+   "points": 0.0
+  },
+  {
+   "feature": "amount_share",
+   "label": "Сумма / годовая выручка",
+   "category": "<10%",
+   "category_label": "меньше 10%",
+   "points": 0.0
+  },
+  {
+   "feature": "marketplace",
+   "label": "Селлер маркетплейса с данными",
+   "category": "нет",
+   "category_label": "нет",
+   "points": 0.0
+  },
+  {
+   "feature": "guarantee",
+   "label": "Гарантия Корпорации МСП",
+   "category": "нет",
+   "category_label": "нет",
+   "points": 0.0
+  },
+  {
+   "feature": "bki_overdue",
+   "label": "Просрочки в БКИ за 12 мес.",
+   "category": "нет",
+   "category_label": "нет",
+   "points": 0.0
+  }
+ ],
+ "approval_imputed_labels": [],
+ "requested_term_m": 36,
+ "monthly_payment": 540519.2692500191,
+ "products": [
+  {
+   "product": "secured",
+   "label": "залоговый кредит",
+   "available": true,
+   "reasons": []
+  },
+  {
+   "product": "express",
+   "label": "экспресс-кредит без залога",
+   "available": true,
+   "reasons": []
+  },
+  {
+   "product": "overdraft",
+   "label": "овердрафт",
+   "available": true,
+   "reasons": []
+  },
+  {
+   "product": "credit_line",
+   "label": "кредитная линия",
+   "available": true,
+   "reasons": []
+  },
+  {
+   "product": "seller_credit",
+   "label": "кредит селлерам",
+   "available": false,
+   "reasons": [
+    {
+     "code": "E03",
+     "category": "нужен магазин на маркетплейсе с переданными данными"
+    }
+   ]
+  },
+  {
+   "product": "card",
+   "label": "бизнес-карта",
+   "available": true,
+   "reasons": []
+  }
+ ]
+}

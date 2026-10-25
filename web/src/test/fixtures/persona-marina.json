@@ -1,0 +1,100 @@
+{
+ "id": "marina",
+ "name": "ООО «Тёплый дом»",
+ "inn": "0010000017",
+ "tagline": "Домашний текстиль на маркетплейсах · 3 года · выручка 48 млн ₽",
+ "story": "Нужно 6 млн ₽ на закупку к Новому году, маркетплейс платит с задержкой 2–3 недели",
+ "okved_name": "Торговля розничная через интернет",
+ "okved": "47.91",
+ "facts": [
+  {
+   "key": "revenue",
+   "label": "Выручка за год",
+   "value": 48000000,
+   "unit": "rub",
+   "source": "демо"
+  },
+  {
+   "key": "revenue_growth",
+   "label": "Рост выручки",
+   "value": 0.15,
+   "unit": "pct",
+   "source": "демо"
+  },
+  {
+   "key": "ebit",
+   "label": "Прибыль до процентов и налогов",
+   "value": 6241000,
+   "unit": "rub",
+   "source": "демо"
+  },
+  {
+   "key": "debt",
+   "label": "Долг",
+   "value": 2400000,
+   "unit": "rub",
+   "source": "демо"
+  },
+  {
+   "key": "debt_service",
+   "label": "Обслуживание долга в год",
+   "value": 1000000,
+   "unit": "rub",
+   "source": "демо"
+  },
+  {
+   "key": "equity_ratio",
+   "label": "Доля собственного капитала",
+   "value": 0.3,
+   "unit": "pct",
+   "source": "демо"
+  },
+  {
+   "key": "tax_debt",
+   "label": "Налоговая задолженность",
+   "value": 0,
+   "unit": "rub",
+   "source": "демо"
+  },
+  {
+   "key": "age_months",
+   "label": "Возраст бизнеса",
+   "value": 36,
+   "unit": "months",
+   "source": "демо"
+  },
+  {
+   "key": "turnover_months",
+   "label": "История отчётности",
+   "value": 36,
+   "unit": "months",
+   "source": "демо"
+  },
+  {
+   "key": "bki_current_dpd",
+   "label": "Текущая просрочка в БКИ",
+   "value": 0,
+   "unit": "days",
+   "source": "демо"
+  },
+  {
+   "key": "bki_max_dpd_12m",
+   "label": "Наибольшая просрочка за 12 мес.",
+   "value": 0,
+   "unit": "days",
+   "source": "демо"
+  }
+ ],
+ "levers": {
+  "product": "express",
+  "requested_amount": 6000000,
+  "requested_term_m": 12,
+  "has_rko": 0,
+  "bank_turnover_month_rub": 0,
+  "guarantee": 0,
+  "marketplace": 1,
+  "insurance": 1,
+  "subscription": 0,
+  "bki_consent": false
+ }
+}

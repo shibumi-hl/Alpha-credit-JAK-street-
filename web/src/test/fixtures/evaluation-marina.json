@@ -1,0 +1,171 @@
+{
+ "inn": "0010000017",
+ "score": 601.5255660807222,
+ "pd": 0.016290287250289272,
+ "risk_class": 3,
+ "approval_probability": 0.626313807634178,
+ "approval_score": 614.9011685473882,
+ "approval_mode": "full",
+ "approval_imputed": [],
+ "outcome": "COUNTER",
+ "product": "express",
+ "offered_product": "express",
+ "requested_amount": 6000000.0,
+ "offered_amount": 3610000.0,
+ "limit": 3610000,
+ "route": null,
+ "pricing": {
+  "funding": 0.14693774205696852,
+  "el": 0.01140320107520249,
+  "capital": 0.010538931872483243,
+  "opex": 0.011385041551246538,
+  "margin": 0.02,
+  "discounts": 0.01,
+  "rate": 0.19026491655590078,
+  "lgd": 0.7,
+  "risk_weight": 0.8521493126925221,
+  "irb_class": "retail",
+  "lgd_capital": 0.7,
+  "fee": 0.02,
+  "insurance_rate": 0.015,
+  "curve_date": "2026-10-22",
+  "all_in": 0.2596302352717337
+ },
+ "stop_factors": [],
+ "reasons": [
+  {
+   "code": "L02",
+   "category": "денежного потока с запасом DSCR ≥ 1,25 хватает на платёж только по этой сумме",
+   "loss": null,
+   "factors": [
+    "dscr"
+   ]
+  }
+ ],
+ "requests": [],
+ "approval_explain": [
+  {
+   "feature": "cash_cover",
+   "label": "Запас денежного потока к платежу",
+   "category": "0.60× платежа",
+   "category_label": "0,60× платежа",
+   "points": 165.94571536346197
+  },
+  {
+   "feature": "product",
+   "label": "Продукт",
+   "category": "express",
+   "category_label": "экспресс-кредит без залога",
+   "points": -20.269756697408738
+  },
+  {
+   "feature": "logit_pd",
+   "label": "PD скоркарты",
+   "category": "1.6%",
+   "category_label": "1,6%",
+   "points": 3.53490479143434
+  },
+  {
+   "feature": "ln_turnover_to_payment",
+   "label": "Среднемесячный оборот к платежу",
+   "category": "7.2× платежа",
+   "category_label": "7,2× платежа",
+   "points": -2.2783999785990505
+  },
+  {
+   "feature": "marketplace",
+   "label": "Селлер маркетплейса с данными",
+   "category": "да",
+   "category_label": "да",
+   "points": 0.8405222864107713
+  },
+  {
+   "feature": "business_age",
+   "label": "Возраст бизнеса, мес.",
+   "category": "36-60",
+   "category_label": "3–5 лет",
+   "points": 0.0
+  },
+  {
+   "feature": "rko",
+   "label": "РКО в банке",
+   "category": "нет",
+   "category_label": "нет",
+   "points": 0.0
+  },
+  {
+   "feature": "bank_turnover",
+   "label": "Обороты в банке / лимит",
+   "category": "<40%",
+   "category_label": "меньше 40%",
+   "points": 0.0
+  },
+  {
+   "feature": "amount_share",
+   "label": "Сумма / годовая выручка",
+   "category": "10-30%",
+   "category_label": "10–30%",
+   "points": 0.0
+  },
+  {
+   "feature": "guarantee",
+   "label": "Гарантия Корпорации МСП",
+   "category": "нет",
+   "category_label": "нет",
+   "points": 0.0
+  },
+  {
+   "feature": "bki_overdue",
+   "label": "Просрочки в БКИ за 12 мес.",
+   "category": "нет",
+   "category_label": "нет",
+   "points": 0.0
+  }
+ ],
+ "approval_imputed_labels": [],
+ "requested_term_m": 12,
+ "monthly_payment": 332730.89149395184,
+ "products": [
+  {
+   "product": "secured",
+   "label": "залоговый кредит",
+   "available": true,
+   "reasons": []
+  },
+  {
+   "product": "express",
+   "label": "экспресс-кредит без залога",
+   "available": true,
+   "reasons": []
+  },
+  {
+   "product": "overdraft",
+   "label": "овердрафт",
+   "available": false,
+   "reasons": [
+    {
+     "code": "E02",
+     "category": "нужен расчётный счёт в банке"
+    }
+   ]
+  },
+  {
+   "product": "credit_line",
+   "label": "кредитная линия",
+   "available": true,
+   "reasons": []
+  },
+  {
+   "product": "seller_credit",
+   "label": "кредит селлерам",
+   "available": true,
+   "reasons": []
+  },
+  {
+   "product": "card",
+   "label": "бизнес-карта",
+   "available": true,
+   "reasons": []
+  }
+ ]
+}

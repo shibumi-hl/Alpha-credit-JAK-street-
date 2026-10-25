@@ -1,0 +1,331 @@
+{
+ "base": {
+  "inn": "0010000017",
+  "score": 601.5255660807222,
+  "pd": 0.016290287250289272,
+  "risk_class": 3,
+  "approval_probability": 0.626313807634178,
+  "approval_score": 614.9011685473882,
+  "approval_mode": "full",
+  "approval_imputed": [],
+  "outcome": "COUNTER",
+  "product": "express",
+  "offered_product": "express",
+  "requested_amount": 6000000.0,
+  "offered_amount": 3610000.0,
+  "limit": 3610000,
+  "route": null,
+  "pricing": {
+   "funding": 0.14693774205696852,
+   "el": 0.01140320107520249,
+   "capital": 0.010538931872483243,
+   "opex": 0.011385041551246538,
+   "margin": 0.02,
+   "discounts": 0.01,
+   "rate": 0.19026491655590078,
+   "lgd": 0.7,
+   "risk_weight": 0.8521493126925221,
+   "irb_class": "retail",
+   "lgd_capital": 0.7,
+   "fee": 0.02,
+   "insurance_rate": 0.015,
+   "curve_date": "2026-10-22",
+   "all_in": 0.2596302352717337
+  },
+  "stop_factors": [],
+  "reasons": [
+   {
+    "code": "L02",
+    "category": "денежного потока с запасом DSCR ≥ 1,25 хватает на платёж только по этой сумме",
+    "loss": null,
+    "factors": [
+     "dscr"
+    ]
+   }
+  ],
+  "requests": [],
+  "approval_explain": [
+   {
+    "feature": "cash_cover",
+    "label": "Запас денежного потока к платежу",
+    "category": "0.60× платежа",
+    "category_label": "0,60× платежа",
+    "points": 165.94571536346197
+   },
+   {
+    "feature": "product",
+    "label": "Продукт",
+    "category": "express",
+    "category_label": "экспресс-кредит без залога",
+    "points": -20.269756697408738
+   },
+   {
+    "feature": "logit_pd",
+    "label": "PD скоркарты",
+    "category": "1.6%",
+    "category_label": "1,6%",
+    "points": 3.53490479143434
+   },
+   {
+    "feature": "ln_turnover_to_payment",
+    "label": "Среднемесячный оборот к платежу",
+    "category": "7.2× платежа",
+    "category_label": "7,2× платежа",
+    "points": -2.2783999785990505
+   },
+   {
+    "feature": "marketplace",
+    "label": "Селлер маркетплейса с данными",
+    "category": "да",
+    "category_label": "да",
+    "points": 0.8405222864107713
+   },
+   {
+    "feature": "business_age",
+    "label": "Возраст бизнеса, мес.",
+    "category": "36-60",
+    "category_label": "3–5 лет",
+    "points": 0.0
+   },
+   {
+    "feature": "rko",
+    "label": "РКО в банке",
+    "category": "нет",
+    "category_label": "нет",
+    "points": 0.0
+   },
+   {
+    "feature": "bank_turnover",
+    "label": "Обороты в банке / лимит",
+    "category": "<40%",
+    "category_label": "меньше 40%",
+    "points": 0.0
+   },
+   {
+    "feature": "amount_share",
+    "label": "Сумма / годовая выручка",
+    "category": "10-30%",
+    "category_label": "10–30%",
+    "points": 0.0
+   },
+   {
+    "feature": "guarantee",
+    "label": "Гарантия Корпорации МСП",
+    "category": "нет",
+    "category_label": "нет",
+    "points": 0.0
+   },
+   {
+    "feature": "bki_overdue",
+    "label": "Просрочки в БКИ за 12 мес.",
+    "category": "нет",
+    "category_label": "нет",
+    "points": 0.0
+   }
+  ],
+  "approval_imputed_labels": [],
+  "requested_term_m": 12,
+  "monthly_payment": 332730.89149395184,
+  "products": [
+   {
+    "product": "secured",
+    "label": "залоговый кредит",
+    "available": true,
+    "reasons": []
+   },
+   {
+    "product": "express",
+    "label": "экспресс-кредит без залога",
+    "available": true,
+    "reasons": []
+   },
+   {
+    "product": "overdraft",
+    "label": "овердрафт",
+    "available": false,
+    "reasons": [
+     {
+      "code": "E02",
+      "category": "нужен расчётный счёт в банке"
+     }
+    ]
+   },
+   {
+    "product": "credit_line",
+    "label": "кредитная линия",
+    "available": true,
+    "reasons": []
+   },
+   {
+    "product": "seller_credit",
+    "label": "кредит селлерам",
+    "available": true,
+    "reasons": []
+   },
+   {
+    "product": "card",
+    "label": "бизнес-карта",
+    "available": true,
+    "reasons": []
+   }
+  ]
+ },
+ "scenarios": [
+  {
+   "key": "collateral",
+   "title": "Добавить залог недвижимости",
+   "outcome": "COUNTER",
+   "offered_product": "secured",
+   "offered_amount": 3630000.0,
+   "approval_probability": 0.8598846856225368,
+   "delta_approval_pp": 23.357087798835884,
+   "pd": 0.0081045828977836,
+   "rate": 0.17515589825334224,
+   "all_in": 0.224155226871805,
+   "delta_rate_pp": -1.5109018302558535,
+   "delta_all_in_pp": -3.5475008399928676,
+   "levers": {
+    "bank_turnover_month_rub": 0.0,
+    "bki_consent": true,
+    "guarantee": false,
+    "has_rko": false,
+    "insurance": true,
+    "marketplace": true,
+    "product": "secured",
+    "requested_amount": 6000000.0,
+    "requested_term_m": 12,
+    "subscription": false
+   }
+  },
+  {
+   "key": "rko_turnover",
+   "title": "Открыть РКО и вести обороты в банке ≥ 40% лимита",
+   "outcome": "COUNTER",
+   "offered_product": "express",
+   "offered_amount": 3620000.0,
+   "approval_probability": 0.6303546481906384,
+   "delta_approval_pp": 0.4040840556460368,
+   "pd": 0.016290287250289272,
+   "rate": 0.18026109047426753,
+   "all_in": 0.24946103567869704,
+   "delta_rate_pp": -1.000382608163325,
+   "delta_all_in_pp": -1.0169199593036637,
+   "levers": {
+    "bank_turnover_month_rub": 3000000,
+    "bki_consent": true,
+    "guarantee": false,
+    "has_rko": 1,
+    "insurance": true,
+    "marketplace": true,
+    "product": "express",
+    "requested_amount": 6000000.0,
+    "requested_term_m": 12,
+    "subscription": false
+   }
+  },
+  {
+   "key": "guarantee",
+   "title": "Получить гарантию Корпорации МСП",
+   "outcome": "COUNTER",
+   "offered_product": "express",
+   "offered_amount": 3630000.0,
+   "approval_probability": 0.6293216519807738,
+   "delta_approval_pp": 0.3007844346595845,
+   "pd": 0.016290287250289272,
+   "rate": 0.17928621899913094,
+   "all_in": 0.24847007033909962,
+   "delta_rate_pp": -1.0978697556769834,
+   "delta_all_in_pp": -1.1160164932634054,
+   "levers": {
+    "bank_turnover_month_rub": 0.0,
+    "bki_consent": true,
+    "guarantee": 1,
+    "has_rko": false,
+    "insurance": true,
+    "marketplace": true,
+    "product": "express",
+    "requested_amount": 6000000.0,
+    "requested_term_m": 12,
+    "subscription": false
+   }
+  },
+  {
+   "key": "amount_to_limit",
+   "title": "Запросить сумму в пределах лимита",
+   "outcome": "APPROVE",
+   "offered_product": "express",
+   "offered_amount": 3610000.0,
+   "approval_probability": 0.840944197189141,
+   "delta_approval_pp": 21.463038955496305,
+   "pd": 0.016290287250289272,
+   "rate": 0.19026491655590078,
+   "all_in": 0.2596302352717337,
+   "delta_rate_pp": 0.0,
+   "delta_all_in_pp": 0.0,
+   "levers": {
+    "bank_turnover_month_rub": 0,
+    "bki_consent": true,
+    "guarantee": false,
+    "has_rko": false,
+    "insurance": true,
+    "marketplace": true,
+    "product": "express",
+    "requested_amount": 3610000,
+    "requested_term_m": 12,
+    "subscription": false
+   }
+  },
+  {
+   "key": "term_24",
+   "title": "Взять на 24 месяца",
+   "outcome": "APPROVE",
+   "offered_product": "express",
+   "offered_amount": 6000000.0,
+   "approval_probability": 0.8426780883702677,
+   "delta_approval_pp": 21.636428073608972,
+   "pd": 0.016290287250289272,
+   "rate": 0.1966711672359967,
+   "all_in": 0.24700239357085296,
+   "delta_rate_pp": 0.6406250680095926,
+   "delta_all_in_pp": -1.2627841700880715,
+   "levers": {
+    "bank_turnover_month_rub": 0.0,
+    "bki_consent": true,
+    "guarantee": false,
+    "has_rko": false,
+    "insurance": true,
+    "marketplace": true,
+    "product": "express",
+    "requested_amount": 6000000.0,
+    "requested_term_m": 24,
+    "subscription": false
+   }
+  },
+  {
+   "key": "no_insurance",
+   "title": "Отказаться от страховки",
+   "outcome": "COUNTER",
+   "offered_product": "express",
+   "offered_amount": 3590000.0,
+   "approval_probability": 0.6235704769714345,
+   "delta_approval_pp": -0.27433306627434595,
+   "pd": 0.016290287250289272,
+   "rate": 0.2002726326648214,
+   "all_in": 0.23956034037070628,
+   "delta_rate_pp": 1.0007716108920621,
+   "delta_all_in_pp": -2.0069894901027396,
+   "levers": {
+    "bank_turnover_month_rub": 0.0,
+    "bki_consent": true,
+    "guarantee": false,
+    "has_rko": false,
+    "insurance": 0,
+    "marketplace": true,
+    "product": "express",
+    "requested_amount": 6000000.0,
+    "requested_term_m": 12,
+    "subscription": false
+   }
+  }
+ ]
+}

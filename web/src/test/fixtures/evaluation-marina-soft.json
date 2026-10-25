@@ -1,0 +1,178 @@
+{
+ "inn": "0010000017",
+ "score": 594.5963865343795,
+ "pd": 0.02100968669598206,
+ "risk_class": 4,
+ "approval_probability": 0.5743713093151145,
+ "approval_score": 608.6477656650536,
+ "approval_mode": "soft",
+ "approval_imputed": [
+  "bki_overdue"
+ ],
+ "outcome": "REQUEST_INFO",
+ "product": "express",
+ "offered_product": "",
+ "requested_amount": 6000000.0,
+ "offered_amount": 0.0,
+ "limit": 0.0,
+ "route": null,
+ "pricing": null,
+ "stop_factors": [],
+ "reasons": [
+  {
+   "code": "R10",
+   "category": "заявка без залога",
+   "loss": 18.88,
+   "factors": [
+    "product"
+   ]
+  },
+  {
+   "code": "R01",
+   "category": "высокая долговая нагрузка",
+   "loss": 3.88,
+   "factors": [
+    "debt_to_ebit",
+    "debt_to_revenue"
+   ]
+  },
+  {
+   "code": "R06",
+   "category": "небольшой или падающий оборот",
+   "loss": 2.61,
+   "factors": [
+    "revenue"
+   ]
+  }
+ ],
+ "requests": [
+  "согласие на запрос кредитной истории"
+ ],
+ "approval_explain": [
+  {
+   "feature": "cash_cover",
+   "label": "Запас денежного потока к платежу",
+   "category": "0.60× платежа",
+   "category_label": "0,60× платежа",
+   "points": 165.81755910993814
+  },
+  {
+   "feature": "product",
+   "label": "Продукт",
+   "category": "express",
+   "category_label": "экспресс-кредит без залога",
+   "points": -20.269756697408738
+  },
+  {
+   "feature": "logit_pd",
+   "label": "PD скоркарты",
+   "category": "2.1%",
+   "category_label": "2,1%",
+   "points": -2.5814812905163684
+  },
+  {
+   "feature": "ln_turnover_to_payment",
+   "label": "Среднемесячный оборот к платежу",
+   "category": "7.2× платежа",
+   "category_label": "7,2× платежа",
+   "points": -2.287260525459123
+  },
+  {
+   "feature": "marketplace",
+   "label": "Селлер маркетплейса с данными",
+   "category": "да",
+   "category_label": "да",
+   "points": 0.8405222864107713
+  },
+  {
+   "feature": "business_age",
+   "label": "Возраст бизнеса, мес.",
+   "category": "36-60",
+   "category_label": "3–5 лет",
+   "points": 0.0
+  },
+  {
+   "feature": "rko",
+   "label": "РКО в банке",
+   "category": "нет",
+   "category_label": "нет",
+   "points": 0.0
+  },
+  {
+   "feature": "bank_turnover",
+   "label": "Обороты в банке / лимит",
+   "category": "<40%",
+   "category_label": "меньше 40%",
+   "points": 0.0
+  },
+  {
+   "feature": "amount_share",
+   "label": "Сумма / годовая выручка",
+   "category": "10-30%",
+   "category_label": "10–30%",
+   "points": 0.0
+  },
+  {
+   "feature": "guarantee",
+   "label": "Гарантия Корпорации МСП",
+   "category": "нет",
+   "category_label": "нет",
+   "points": 0.0
+  },
+  {
+   "feature": "bki_overdue",
+   "label": "Просрочки в БКИ за 12 мес.",
+   "category": "нет данных",
+   "category_label": "нет данных",
+   "points": 0.0
+  }
+ ],
+ "approval_imputed_labels": [
+  "Просрочки в БКИ за 12 мес."
+ ],
+ "requested_term_m": 12,
+ "monthly_payment": null,
+ "products": [
+  {
+   "product": "secured",
+   "label": "залоговый кредит",
+   "available": true,
+   "reasons": []
+  },
+  {
+   "product": "express",
+   "label": "экспресс-кредит без залога",
+   "available": true,
+   "reasons": []
+  },
+  {
+   "product": "overdraft",
+   "label": "овердрафт",
+   "available": false,
+   "reasons": [
+    {
+     "code": "E02",
+     "category": "нужен расчётный счёт в банке"
+    }
+   ]
+  },
+  {
+   "product": "credit_line",
+   "label": "кредитная линия",
+   "available": true,
+   "reasons": []
+  },
+  {
+   "product": "seller_credit",
+   "label": "кредит селлерам",
+   "available": true,
+   "reasons": []
+  },
+  {
+   "product": "card",
+   "label": "бизнес-карта",
+   "available": true,
+   "reasons": []
+  }
+ ]
+}
