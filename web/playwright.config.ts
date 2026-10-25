@@ -4,6 +4,7 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: 'e2e',
   timeout: 60_000,
+  workers: 1, // один клиент на все проекты: параллельные подачи Марины упрутся в правило одной активной заявки
   use: { baseURL: process.env.BASE_URL ?? 'http://localhost:5183', trace: 'retain-on-failure' },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } } },

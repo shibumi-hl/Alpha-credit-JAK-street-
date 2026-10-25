@@ -6,17 +6,22 @@ API песочницы кредита: демо-компании, расчёт �
 
   uvicorn --factory api.app:create_app --host 127.0.0.1 --port 3100     # модель - default_engine_path()
 """
+import asyncio
+import contextlib
 import json
 import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from api import dto
+from api import auth, dto, igor, mocks
+from api.conveyor import Conveyor
 from api.personas import application, load_personas
 from scoring.whatif import AXES, SCENARIOS, Engine, _derive, evaluate, simulate, whatif
 
@@ -41,6 +46,32 @@ class Levers(BaseModel):
 class Ask(BaseModel):
     persona_id: str
     levers: Levers
+
+
+class Login(BaseModel):
+    username: str
+    password: str
+
+
+class Submit(Ask):
+    purpose: str = Field("", max_length=500)
+    bki_consent: bool = False  # согласие на БКИ - явно в теле подачи
+
+
+class Action(BaseModel):
+    action: str
+    note: str | None = Field(None, max_length=2000)
+    amount: float | None = Field(None, gt=0, le=300_000_000)
+    code: str | None = Field(None, max_length=8)
+
+
+class Message(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=4000)
+
+
+class Chat(Ask):
+    messages: list[Message] = Field(max_length=40)
 
 
 class Sweep(Ask):
@@ -75,7 +106,24 @@ def create_app(engine: Engine = None, personas: dict = None) -> FastAPI:
     engine = engine or Engine.load(default_engine_path())
     personas = personas or load_personas()
     policy = engine.policy
-    app = FastAPI(title="МойАльфаКредит · песочница", docs_url="/api/docs", openapi_url="/api/openapi.json")
+    conveyor = Conveyor(engine, personas)
+    llm = igor.make_llm_from_env()
+
+    @contextlib.asynccontextmanager
+    async def lifespan(_):
+        async def worker():  # автоматические шаги конвейера: приём, проверка данных, скоринг
+            while True:
+                with contextlib.suppress(Exception):
+                    await run_in_threadpool(conveyor.step_due)
+                await asyncio.sleep(0.5)
+        task = asyncio.create_task(worker())
+        yield
+        task.cancel()
+
+    app = FastAPI(title="МойАльфаКредит · кредитный конвейер", version="1.0.0", lifespan=lifespan,
+                  docs_url="/api/docs", openapi_url="/api/openapi.json",
+                  description="Песочница кредита, заявки и статусная машина, кабинет аналитика, лента и ИИгорь. "
+                              "Защищённые методы - Bearer-токен из /api/v1/auth/login.")
 
     @app.exception_handler(ValueError)
     def _bad_application(_: Request, e: ValueError):  # некорректная заявка: текст движка уже по-русски
@@ -130,6 +178,8 @@ def create_app(engine: Engine = None, personas: dict = None) -> FastAPI:
 
     @app.get("/api/health")
     def health():
+        if not conveyor.ping():  # база недоступна - контейнер нездоров, оркестратор его перезапустит
+            return JSONResponse(status_code=503, content={"ok": False, "detail": "База данных недоступна"})
         return {"ok": True, "asof": str(engine.asof)}
 
     @app.get("/api/v1/meta")
@@ -156,4 +206,67 @@ def create_app(engine: Engine = None, personas: dict = None) -> FastAPI:
     def simulate_(sweep: Sweep):
         return _simulate(*_key(sweep), sweep.axis, sweep.n)
 
+    # --- конвейер заявки ---
+    @app.post("/api/v1/auth/login")
+    def login(body: Login):
+        return auth.issue(body.username, body.password)
+
+    @app.get("/api/v1/companies/{inn}")
+    def company(inn: str):
+        return mocks.company(personas, inn, engine.asof)
+
+    @app.get("/api/v1/news")
+    def news(persona_id: str):
+        return mocks.news(persona(persona_id), conveyor.latest_status(persona_id))
+
+    @app.post("/api/v1/applications", status_code=201)
+    def submit(body: Submit, user: dict = Depends(auth.user), idempotency_key: str = Header(None, max_length=128)):
+        persona(body.persona_id)
+        _evaluate(*_key(body))  # некорректные рычаги - 422 до создания заявки
+        app_id = conveyor.create(user, body.persona_id, body.levers.model_dump(), body.purpose, body.bki_consent,
+                                 idempotency_key)
+        return conveyor.get(user, app_id)
+
+    @app.get("/api/v1/applications")
+    def applications(status: str = None, user: dict = Depends(auth.user)):
+        return conveyor.list(user, status)
+
+    @app.get("/api/v1/applications/{app_id}")
+    def application_(app_id: str, user: dict = Depends(auth.user)):
+        return conveyor.get(user, app_id)
+
+    @app.post("/api/v1/applications/{app_id}/actions")
+    def action(app_id: str, body: Action, user: dict = Depends(auth.user)):
+        return conveyor.act(user, app_id, body.action, body.note, body.amount, body.code)
+
+    @app.post("/api/v1/chat")
+    def chat(body: Chat, user: dict = Depends(auth.user)):
+        p = persona(body.persona_id)
+
+        def levers_of(lv: dict) -> dict:
+            return Levers(**lv).model_dump()
+
+        def ev(lv: dict) -> dict:
+            return _evaluate(body.persona_id, json.dumps(levers_of(lv), sort_keys=True))
+
+        def wi(lv: dict) -> dict:
+            return _whatif(body.persona_id, json.dumps(levers_of(lv), sort_keys=True))
+
+        return igor.reply(p, body.levers.model_dump(), [m.model_dump() for m in body.messages], ev, wi, llm)
+
+    # собранный фронт (Docker): статика и index.html для hash-маршрутов
+    dist = Path(os.environ.get("WEB_DIST", ROOT / "web" / "dist"))
+    if (dist / "index.html").exists():
+        app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
+
+        @app.get("/{path:path}", include_in_schema=False)
+        def spa(path: str):
+            if path.startswith("api/"):
+                raise HTTPException(404, "Нет такого метода API")
+            f = (dist / path).resolve()
+            if path and f.is_file() and dist.resolve() in f.parents:
+                return FileResponse(f)
+            return FileResponse(dist / "index.html")
+
+    app.state.conveyor = conveyor
     return app

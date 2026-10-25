@@ -14,7 +14,7 @@ def test_inn_checksum():
 
 def test_personas_are_fictional_legal_entities_with_complete_facts():
     personas = load_personas()
-    assert len(personas) == 5 and "marina" in personas
+    assert len(personas) == 6 and "marina" in personas  # шестая - «Ромашка» для проверки сбоя БКИ (T6)
     policy = load_policy()
     for pid, p in personas.items():
         assert p["id"] == pid and p["name"] and p["tagline"]

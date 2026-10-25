@@ -7,6 +7,9 @@ import { KpiRow } from './components/KpiRow';
 import { LeversPanel } from './components/LeversPanel';
 import { RateWaterfall } from './components/RateWaterfall';
 import { SCENARIO_MIME, WhatIf } from './components/WhatIf';
+import { Onboarding } from './components/Onboarding';
+import { SidePanel } from './components/SidePanel';
+import { SubmitBlock } from './components/SubmitBlock';
 import type { Action } from './lib/decision';
 import { productLabel } from './lib/decision';
 import { months, rub } from './lib/format';
@@ -16,7 +19,6 @@ import type { Scenario } from './lib/schemas';
 import { useSandbox } from './lib/store';
 
 const DEMO_NOTICE = {
-  submit: 'Это демо: заявка никуда не отправляется. В продукте здесь — подача и трекер статусов.',
   upload: 'В демо документы не загружаются. В продукте — загрузка прямо в кабинете, срок рассмотрения на паузе.',
 };
 // признак вклада → рычаг, который его меняет; остальное — факты компании
@@ -42,6 +44,7 @@ export function App() {
   const [sheet, setSheet] = useState(false);
   const [drop, setDrop] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [undoShown, setUndoShown] = useState<string | null>(null);
   const { personaId, levers, history, drag, ghost, load, set, apply, setProduct, undo, setDrag, setGhost } = useSandbox();
 
@@ -57,6 +60,7 @@ export function App() {
     if (persona.data && persona.data.id !== personaId) {
       load(persona.data.id, persona.data.levers);
       setNotice(null);
+      setSubmitting(false);
       const u = new URL(location.href);
       u.searchParams.set('company', persona.data.id);
       window.history.replaceState(null, '', u);
@@ -115,11 +119,13 @@ export function App() {
   const onAction = (a: Action) => {
     if (a.change) set(a.change, a.label);
     if (a.kind === 'variants') document.getElementById('whatif')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    if (a.kind === 'submit' || a.kind === 'upload') setNotice(DEMO_NOTICE[a.kind]);
+    if (a.kind === 'submit') setSubmitting(true);
+    if (a.kind === 'upload') setNotice(DEMO_NOTICE.upload);
     if (a.kind === 'switch-company') document.getElementById('company-select')?.focus();
   };
   const applyScenario = (s: Scenario) => {
-    apply(s.levers, s.title);
+    // согласие на БКИ — выбор клиента, не часть сценария: карточки могут быть от прошлого ответа (keepPreviousData)
+    apply({ ...s.levers, bki_consent: levers?.bki_consent ?? s.levers.bki_consent }, s.title);
     setGhost(null);
   };
   const pickFeature = (feature: string) => {
@@ -185,6 +191,9 @@ export function App() {
           </button>
         </div>
       )}
+      <div style={{ marginTop: 16 }}>
+        <Onboarding personas={personas.data} onPick={setWanted} />
+      </div>
       <div className="layout" style={{ marginTop: 16 }}>
         <aside
           className="levers-col"
@@ -209,6 +218,15 @@ export function App() {
           {e ? (
             <>
               <DecisionCard e={e} meta={m} hint={igorHint(e, wi.data?.scenarios)} thinking={ev.isFetching} notice={notice} onAction={onAction} />
+              {submitting && personaId && levers && (
+                <SubmitBlock
+                  personaId={personaId}
+                  levers={levers}
+                  story={persona.data?.story ?? ''}
+                  onConsent={() => set({ bki_consent: true }, 'Согласие на запрос в БКИ')}
+                  onClose={() => setSubmitting(false)}
+                />
+              )}
               <KpiRow e={e} curve={curve.data} drag={drag} ghost={ghost} stale={ev.isFetching} revolving={!!product?.revolving} />
               <div className="grid-2">
                 {(['approval', 'rate'] as const).map((metric) => (
@@ -242,6 +260,7 @@ export function App() {
               </div>
             </>
           )}
+          {personaId && levers && <SidePanel personaId={personaId} levers={levers} />}
           <footer className="footer t-caption muted">
             Предварительная оценка, не решение банка · параметры цены иллюстративные · демо-компании вымышлены · модели на{' '}
             {m ? new Date(m.asof).toLocaleDateString('ru-RU') : '…'}
