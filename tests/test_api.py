@@ -139,3 +139,16 @@ def test_simulate_hides_another_products_limit_on_a_route(client):
     assert base["route"]["from"] == "overdraft" and base["route"]["reasons"][0]["code"] == "E02"  # овердрафт - только с РКО
     sim = client.post("/api/v1/simulate", json={"persona_id": "bakery", "levers": levers, "n": 16}).json()
     assert (sim["limit"], sim["binding"]) == (0, None)  # лимит карты на кривой овердрафта вводил бы в заблуждение
+
+
+def test_engine_path_prefers_env_then_fresh_training_then_the_committed_model(tmp_path, monkeypatch):
+    import api.app as app_module
+    monkeypatch.setattr(app_module, "ROOT", tmp_path)
+    monkeypatch.delenv("ENGINE_PATH", raising=False)
+    assert app_module.default_engine_path() == tmp_path / "models" / "engine.pkl"  # свежий клон: data/ нет в git
+    fresh = tmp_path / "data" / "scoring" / "engine.pkl"
+    fresh.parent.mkdir(parents=True)
+    fresh.write_bytes(b"")
+    assert app_module.default_engine_path() == fresh  # переобучили локально - берём своё
+    monkeypatch.setenv("ENGINE_PATH", str(tmp_path / "other.pkl"))
+    assert app_module.default_engine_path() == tmp_path / "other.pkl"

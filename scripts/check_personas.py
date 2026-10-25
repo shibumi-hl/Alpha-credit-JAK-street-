@@ -2,7 +2,7 @@
 Проверка демо-компаний песочницы на обученном движке: исход каждой компании совпадает с ожиданием из её файла,
 а Марина даёт числа текста защиты (слайды 07 и 12).
 
-  py scripts/check_personas.py                         # движок data/scoring/engine.pkl
+  py scripts/check_personas.py                         # data/scoring/engine.pkl, без него - models/engine.pkl
   py scripts/check_personas.py --engine path/engine.pkl
 """
 import argparse
@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from api.app import default_engine_path  # noqa: E402
 from api.personas import application, load_personas  # noqa: E402
 from scoring.whatif import Engine, evaluate, whatif  # noqa: E402
 
@@ -64,7 +65,7 @@ def marina(engine) -> list:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--engine", type=Path, default=ROOT / "data" / "scoring" / "engine.pkl")
+    ap.add_argument("--engine", type=Path, default=default_engine_path())
     a = ap.parse_args()
     sys.stdout.reconfigure(errors="replace")
     with warnings.catch_warnings():

@@ -4,7 +4,7 @@ API песочницы кредита: демо-компании, расчёт �
 Клиент присылает persona_id и рычаги, факты берутся только из файла демо-компании (api.personas). Движок грузится
 один раз при старте; ответы кэшируются по (компания, рычаги) - движок детерминирован.
 
-  uvicorn --factory api.app:create_app --host 127.0.0.1 --port 3100     # ENGINE_PATH - путь к engine.pkl
+  uvicorn --factory api.app:create_app --host 127.0.0.1 --port 3100     # модель - default_engine_path()
 """
 import json
 import os
@@ -62,8 +62,17 @@ def _amount_grid(levers: dict, product: dict, revenue: float, n: int, base: dict
     return sorted(x for x in xs if lo <= x <= hi)
 
 
+def default_engine_path() -> Path:
+    """ENGINE_PATH; иначе свежеобученный data/scoring/engine.pkl (data/ в git нет); иначе модель из репозитория
+    models/engine.pkl - чтобы песочница поднималась из чистого клона."""
+    if os.environ.get("ENGINE_PATH"):
+        return Path(os.environ["ENGINE_PATH"])
+    fresh = ROOT / "data" / "scoring" / "engine.pkl"
+    return fresh if fresh.exists() else ROOT / "models" / "engine.pkl"
+
+
 def create_app(engine: Engine = None, personas: dict = None) -> FastAPI:
-    engine = engine or Engine.load(Path(os.environ.get("ENGINE_PATH", ROOT / "data" / "scoring" / "engine.pkl")))
+    engine = engine or Engine.load(default_engine_path())
     personas = personas or load_personas()
     policy = engine.policy
     app = FastAPI(title="МойАльфаКредит · песочница", docs_url="/api/docs", openapi_url="/api/openapi.json")

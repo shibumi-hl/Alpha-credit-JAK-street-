@@ -9,7 +9,11 @@ cd "$(dirname "$0")/.."
 if [ -f .env ]; then set -a; . ./.env; set +a; fi
 : "${DEPLOY_HOST:?DEPLOY_HOST, например root@1.2.3.4}" "${DEPLOY_DOMAIN:?DEPLOY_DOMAIN, например credit.example.ru}"
 KEY="${DEPLOY_KEY:-$HOME/.ssh/ana_deploy}"
-ENGINE="${ENGINE_PATH:-data/scoring/engine.pkl}"
+# модель: ENGINE_PATH, иначе свежеобученная data/scoring/engine.pkl, иначе из репозитория models/engine.pkl
+ENGINE="${ENGINE_PATH:-}"
+if [ -z "$ENGINE" ]; then
+  if [ -f data/scoring/engine.pkl ]; then ENGINE=data/scoring/engine.pkl; else ENGINE=models/engine.pkl; fi
+fi
 SSH=(ssh -i "$KEY" -o IdentitiesOnly=yes -o BatchMode=yes "$DEPLOY_HOST")
 [ -f "$ENGINE" ] || { echo "нет $ENGINE - сначала py scripts/train_scorecard.py" >&2; exit 1; }
 
