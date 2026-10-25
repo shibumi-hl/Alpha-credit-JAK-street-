@@ -8,6 +8,10 @@ Group=alfacredit
 WorkingDirectory=/opt/alfa-credit/app
 Environment=ENGINE_PATH=/var/lib/alfa-credit/engine.pkl
 Environment=PYTHONUNBUFFERED=1
+# заявки и журнал конвейера: SQLite в каталоге данных сервиса (ProtectSystem=strict - остальное только чтение)
+Environment=DATABASE_URL=sqlite:////var/lib/alfa-credit/app.db
+# SECRET_KEY для токенов входа и необязательные LLM_*: файл создаёт install.sh, в git не попадает
+EnvironmentFile=-/etc/alfa-credit/env
 # optbinning импортирует matplotlib, ему нужен каталог для кэша
 Environment=MPLCONFIGDIR=/tmp/matplotlib
 ExecStart=/opt/alfa-credit/venv/bin/uvicorn --factory api.app:create_app --host 127.0.0.1 --port 3100 --workers 1 --no-access-log
@@ -18,6 +22,7 @@ MemoryMax=450M
 CPUQuota=80%
 NoNewPrivileges=true
 ProtectSystem=strict
+ReadWritePaths=/var/lib/alfa-credit
 ProtectHome=true
 PrivateTmp=true
 PrivateDevices=true

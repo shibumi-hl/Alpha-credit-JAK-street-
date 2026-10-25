@@ -7,6 +7,11 @@ DOMAIN="$(cat /etc/alfa-credit/domain)"
 ALIASES="$(cat /etc/alfa-credit/aliases 2>/dev/null || true)"  # прежние адреса: редирект на DOMAIN
 SITE=/etc/caddy/sites/alfa-credit.caddy
 
+# ключ подписи токенов входа - один раз на сервер, только root читает (systemd передаёт его сервису)
+if [ ! -f /etc/alfa-credit/env ]; then
+  (umask 077 && printf 'SECRET_KEY=%s\n' "$(openssl rand -hex 32)" > /etc/alfa-credit/env)
+fi
+
 # зависимости - только когда изменился список точных версий
 if ! cmp -s "$NEXT/deploy/requirements-server.txt" /opt/alfa-credit/requirements.txt; then
   /opt/alfa-credit/venv/bin/pip install -q --no-cache-dir --disable-pip-version-check -r "$NEXT/deploy/requirements-server.txt"
