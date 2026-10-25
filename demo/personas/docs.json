@@ -1,0 +1,21 @@
+{
+  "id": "docs",
+  "name": "ООО «Стройресурс»",
+  "inn": "0040000046",
+  "tagline": "Жилое строительство · 6 лет · выручка 90 млн ₽",
+  "story": "Кредитная линия 8 млн ₽ на материалы для нового объекта",
+  "okved_name": "Строительство жилых и нежилых зданий",
+  "facts": {
+    "okved_section": "F", "okved": "41.20", "status": "ACTIVE",
+    "revenue": 90000000, "revenue_growth": 0.05, "revenue_cv": 0.2,
+    "ebit": 9000000, "debt": 20000000, "interest": 3000000, "debt_service": 4000000, "equity_ratio": 0.25,
+    "tax_debt": 270000, "age_months": 70, "turnover_months": 60,
+    "bki_max_dpd_12m": 0, "bki_overdue_cnt_12m": 0, "bki_current_dpd": 0
+  },
+  "levers": {
+    "product": "credit_line", "requested_amount": 8000000, "requested_term_m": 24, "has_rko": 0,
+    "bank_turnover_month_rub": 0, "guarantee": 0, "marketplace": 0, "insurance": 0, "subscription": 0,
+    "bki_consent": true
+  },
+  "expect": {"outcome": "REQUEST_INFO"}
+}

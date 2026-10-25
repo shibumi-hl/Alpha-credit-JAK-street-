@@ -1,0 +1,21 @@
+{
+  "id": "young",
+  "name": "ООО «Новый цех»",
+  "inn": "0030000030",
+  "tagline": "Металлообработка на заказ · 8 месяцев · выручка 14 млн ₽",
+  "story": "Хотим кредитную линию на 3 млн ₽ под заказы",
+  "okved_name": "Обработка металлических изделий механическая",
+  "facts": {
+    "okved_section": "C", "okved": "25.62", "status": "ACTIVE",
+    "revenue": 14000000, "revenue_growth": 0.0, "revenue_cv": 0.2,
+    "ebit": 2200000, "debt": 0, "interest": 0, "debt_service": 0, "equity_ratio": 0.35,
+    "tax_debt": 0, "age_months": 8, "turnover_months": 8,
+    "bki_max_dpd_12m": 0, "bki_overdue_cnt_12m": 0, "bki_current_dpd": 0
+  },
+  "levers": {
+    "product": "credit_line", "requested_amount": 3000000, "requested_term_m": 12, "has_rko": 0,
+    "bank_turnover_month_rub": 0, "guarantee": 0, "marketplace": 0, "insurance": 0, "subscription": 0,
+    "bki_consent": true
+  },
+  "expect": {"outcome": "COUNTER", "offered_product": "card", "route_codes": ["E01"]}
+}

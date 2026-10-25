@@ -1,0 +1,21 @@
+{
+  "id": "marina",
+  "name": "ООО «Тёплый дом»",
+  "inn": "0010000017",
+  "tagline": "Домашний текстиль на маркетплейсах · 3 года · выручка 48 млн ₽",
+  "story": "Нужно 6 млн ₽ на закупку к Новому году, маркетплейс платит с задержкой 2–3 недели",
+  "okved_name": "Торговля розничная через интернет",
+  "facts": {
+    "okved_section": "G", "okved": "47.91", "status": "ACTIVE",
+    "revenue": 48000000, "revenue_growth": 0.15, "revenue_cv": 0.25,
+    "ebit": 6241000, "debt": 2400000, "interest": 360000, "debt_service": 1000000, "equity_ratio": 0.30,
+    "tax_debt": 0, "age_months": 36, "turnover_months": 36,
+    "bki_max_dpd_12m": 0, "bki_overdue_cnt_12m": 0, "bki_current_dpd": 0
+  },
+  "levers": {
+    "product": "express", "requested_amount": 6000000, "requested_term_m": 12, "has_rko": 0,
+    "bank_turnover_month_rub": 0, "guarantee": 0, "marketplace": 1, "insurance": 1, "subscription": 0,
+    "bki_consent": false
+  },
+  "expect": {"outcome": "REQUEST_INFO", "with_bki": {"outcome": "COUNTER", "offered_amount": 3610000, "codes": ["L02"]}}
+}

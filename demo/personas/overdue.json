@@ -1,0 +1,21 @@
+{
+  "id": "overdue",
+  "name": "ООО «Транзит-М»",
+  "inn": "0050000052",
+  "tagline": "Грузоперевозки · 5 лет · выручка 60 млн ₽",
+  "story": "Экспресс-кредит 4 млн ₽ на ремонт тягачей",
+  "okved_name": "Деятельность автомобильного грузового транспорта",
+  "facts": {
+    "okved_section": "H", "okved": "49.41", "status": "ACTIVE",
+    "revenue": 60000000, "revenue_growth": -0.1, "revenue_cv": 0.2,
+    "ebit": 5000000, "debt": 30000000, "interest": 4500000, "debt_service": 6000000, "equity_ratio": 0.15,
+    "tax_debt": 0, "age_months": 60, "turnover_months": 48,
+    "bki_max_dpd_12m": 45, "bki_overdue_cnt_12m": 2, "bki_current_dpd": 45
+  },
+  "levers": {
+    "product": "express", "requested_amount": 4000000, "requested_term_m": 12, "has_rko": 0,
+    "bank_turnover_month_rub": 0, "guarantee": 0, "marketplace": 0, "insurance": 0, "subscription": 0,
+    "bki_consent": true
+  },
+  "expect": {"outcome": "REJECT", "codes": ["S01"]}
+}

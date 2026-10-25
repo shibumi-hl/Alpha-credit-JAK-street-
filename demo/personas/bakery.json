@@ -1,0 +1,21 @@
+{
+  "id": "bakery",
+  "name": "ООО «Северный хлеб»",
+  "inn": "0020000023",
+  "tagline": "Пекарня и сеть киосков · 12 лет · выручка 220 млн ₽",
+  "story": "Новая печь и линия упаковки, залог — производственный цех",
+  "okved_name": "Производство хлеба и хлебобулочных изделий",
+  "facts": {
+    "okved_section": "C", "okved": "10.71", "status": "ACTIVE",
+    "revenue": 220000000, "revenue_growth": 0.12, "revenue_cv": 0.2,
+    "ebit": 30000000, "debt": 25000000, "interest": 3750000, "debt_service": 6000000, "equity_ratio": 0.55,
+    "tax_debt": 0, "age_months": 150, "turnover_months": 96,
+    "bki_max_dpd_12m": 0, "bki_overdue_cnt_12m": 0, "bki_current_dpd": 0
+  },
+  "levers": {
+    "product": "secured", "requested_amount": 15000000, "requested_term_m": 36, "has_rko": 1,
+    "bank_turnover_month_rub": 12000000, "guarantee": 0, "marketplace": 0, "insurance": 1, "subscription": 0,
+    "bki_consent": true
+  },
+  "expect": {"outcome": "APPROVE"}
+}
