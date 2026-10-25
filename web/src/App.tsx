@@ -124,7 +124,8 @@ export function App() {
     if (a.kind === 'switch-company') document.getElementById('company-select')?.focus();
   };
   const applyScenario = (s: Scenario) => {
-    apply(s.levers, s.title);
+    // согласие на БКИ — выбор клиента, не часть сценария: карточки могут быть от прошлого ответа (keepPreviousData)
+    apply({ ...s.levers, bki_consent: levers?.bki_consent ?? s.levers.bki_consent }, s.title);
     setGhost(null);
   };
   const pickFeature = (feature: string) => {
