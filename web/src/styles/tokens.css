@@ -1,0 +1,63 @@
+/* Токены DESIGN.md: светлая тема по умолчанию, тёмная — по системной настройке. */
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #f6f6f8;
+  --surface-2: #ededf1;
+  --line: #e4e4e9;
+  --ink: #0b0b0c;
+  --ink-2: #62626b;
+  --brand: #ef3124;
+  --brand-ink: #ffffff;
+  --approval: #2e6bff;
+  --rate: #e5620f;
+  --plus: #1f9d55;
+  --minus: #d23f6e;
+  --amber: #b37a00;
+  --zone-approve: rgb(31 157 85 / 0.1);
+  --zone-counter: rgb(232 161 0 / 0.12);
+  --zone-info: rgb(46 107 255 / 0.08);
+  --zone-no: rgb(98 98 107 / 0.08);
+  --focus: #2e6bff;
+  --tint-approve: rgb(31 157 85 / 0.12);
+  --tint-counter: rgb(232 161 0 / 0.16);
+  --tint-info: rgb(46 107 255 / 0.1);
+  --tint-reject: rgb(98 98 107 / 0.12);
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.06), 0 4px 12px rgb(0 0 0 / 0.06);
+  --shadow-2: 0 12px 32px rgb(0 0 0 / 0.14);
+
+  --font: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.3, 0, 1, 1);
+  --r-chip: 8px;
+  --r-button: 12px;
+  --r-card: 20px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #0e0e10;
+    --surface: #18181c;
+    --surface-2: #232329;
+    --line: #2c2c33;
+    --ink: #f4f4f5;
+    --ink-2: #a1a1aa;
+    --approval: #5b8cff;
+    --rate: #ff8a3d;
+    --plus: #3dd68c;
+    --minus: #ff6b95;
+    --amber: #f5b83d;
+    --zone-approve: rgb(61 214 140 / 0.12);
+    --zone-counter: rgb(245 184 61 / 0.14);
+    --zone-info: rgb(91 140 255 / 0.12);
+    --zone-no: rgb(161 161 170 / 0.1);
+    --focus: #5b8cff;
+    --tint-approve: rgb(61 214 140 / 0.16);
+    --tint-counter: rgb(245 184 61 / 0.18);
+    --tint-info: rgb(91 140 255 / 0.16);
+    --tint-reject: rgb(161 161 170 / 0.16);
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 12px rgb(0 0 0 / 0.3);
+    --shadow-2: 0 12px 32px rgb(0 0 0 / 0.5);
+  }
+}

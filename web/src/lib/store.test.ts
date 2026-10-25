@@ -11,10 +11,10 @@ describe('levers state', () => {
   it('applies a scenario and undoes it', () => {
     const s = useSandbox.getState();
     s.apply({ ...base, requested_term_m: 24 }, 'Взять на 24 месяца');
-    expect(useSandbox.getState().levers.requested_term_m).toBe(24);
+    expect(useSandbox.getState().levers!.requested_term_m).toBe(24);
     expect(useSandbox.getState().history.at(-1)!.label).toBe('Взять на 24 месяца');
     useSandbox.getState().undo();
-    expect(useSandbox.getState().levers.requested_term_m).toBe(12);
+    expect(useSandbox.getState().levers!.requested_term_m).toBe(12);
     expect(useSandbox.getState().history).toHaveLength(0);
   });
 
