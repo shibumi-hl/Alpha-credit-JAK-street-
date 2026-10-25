@@ -133,6 +133,7 @@ cd web && npx playwright test  # e2e web/e2e/golden.spec.ts: нужны запу
 - `docs/data-model.md` — модель данных
 - `docs/api.md` — описание API; `docs/openapi.json` — OpenAPI; `docs/postman_collection.json` — коллекция запросов
 - `docs/test-scenarios.md` — тестовые сценарии T1-T7
+- `docs/security-scan.md` — отчёт сканирования уязвимостей (trivy, snyk) и разбор находок
 - `docs/dashboard-igor-spec.md`, `DESIGN.md` — спецификация и дизайн песочницы
 - `THIRD_PARTY_NOTICES` — сторонние компоненты, данные, модели и сервисы
 
