@@ -147,13 +147,48 @@ def evaluate(engine: Engine, app: dict) -> dict:
         "inn": a.get("inn"), "score": r.score, "pd": r.pd, "risk_class": r.risk_class,
         "approval_probability": float(engine.approval.predict(scored, stopped=[stopped])[0]),
         "approval_score": float(engine.approval.score(scored)[0]),
-        "approval_explain": engine.approval.explain(scored.iloc[0])[:5],
+        "approval_explain": engine.approval.explain(scored.iloc[0]),
         "approval_mode": "soft" if imputed else "full", "approval_imputed": imputed,
         "outcome": r.outcome, "product": r["product"], "offered_product": r.offered_product,
         "requested_amount": a["requested_amount"], "offered_amount": r.offered_amount, "limit": r.limit,
         "route": r.route, "pricing": r.pricing, "stop_factors": r.stop_factors, "reasons": r.reasons,
         "requests": r.requests,
     })
+
+
+AXES = ("requested_amount", "requested_term_m")
+
+
+def simulate(engine: Engine, app: dict, axis: str, grid) -> list:
+    """Развёртка заявки по сумме или сроку - точки кривых шанса и ставки. Все точки - одним DataFrame через assess и
+    модель одобрения (пачкой в десятки раз быстрее, чем evaluate на каждую). По сумме месячный оборот в банке тот же,
+    как в сценарии «сумма в пределах лимита». rate_requested - ставка на запрошенную сумму точки (по ней кривая
+    ставки), rate и all_in - на сумму предложения; binding - код L того, что ограничило сумму контрпредложения."""
+    if axis not in AXES:
+        raise ValueError(f"ось развёртки должна быть одной из {', '.join(AXES)}, а не {axis!r}")
+    a = _derive(app, engine.policy)
+    turnover = float(a["bank_turnover_ratio"]) * float(a["requested_amount"])
+    rows = []
+    for x in grid:
+        r = {**a, axis: x}
+        if axis == "requested_amount":
+            r["bank_turnover_ratio"] = turnover / float(x)
+        rows.append(_derive(r, engine.policy))
+    df = pd.DataFrame(rows)
+    out = assess(df, engine.scorecard, engine.policy, pricing=engine.pricing, curves=engine.curves, asof=engine.asof)
+    asked = _rates(df, out.pd, engine.pricing, engine.curves, engine.asof)
+    stopped = (out.stop_codes.str.len() > 0).to_numpy()
+    p = engine.approval.predict(df.assign(pd=out.pd.to_numpy(), rate=asked), stopped=stopped)
+    points = []
+    for x, (_, r), rate_requested, prob in zip(grid, out.iterrows(), asked, p):
+        same = r.outcome == "COUNTER" and r.offered_product == r["product"]
+        q = r.pricing or {}
+        points.append(_py({
+            "x": x, "approval_probability": float(prob), "outcome": r.outcome, "offered_product": r.offered_product,
+            "offered_amount": r.offered_amount, "limit": r.limit, "binding": r.reasons[0]["code"] if same else None,
+            "pd": r.pd, "rate_requested": rate_requested, "rate": q.get("rate"), "all_in": q.get("all_in"),
+        }))
+    return points
 
 
 def whatif(engine: Engine, app: dict, scenarios=None) -> dict:

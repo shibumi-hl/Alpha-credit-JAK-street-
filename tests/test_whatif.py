@@ -12,7 +12,7 @@ from scoring.approval import ApprovalModel, approval_target, monthly_payment
 from scoring.gcurve import CurveStore
 from scoring import synth
 from scoring.pricing import price
-from scoring.whatif import SCENARIOS, Engine, _derive, evaluate, whatif
+from scoring.whatif import SCENARIOS, Engine, _derive, evaluate, simulate, whatif
 
 warnings.filterwarnings("ignore")
 ASOF = date(2024, 2, 1)
@@ -201,3 +201,44 @@ def test_whatif_works_on_a_minimal_application(eng):
     assert out["base"]["product"] == engine.policy["default_product"]
     assert "S07" not in [s["code"] for s in out["base"]["stop_factors"]]
     assert out["scenarios"] and {"collateral", "rko_turnover"} <= {s["key"] for s in out["scenarios"]}
+
+
+def test_explain_lists_every_feature(eng):
+    df, engine, _ = eng
+    r = evaluate(engine, _app(df))
+    names = [x["признак"] for x in r["approval_explain"]]
+    assert len(names) == len(set(names)) == 11  # 8 категорий заявки + PD, запас денежного потока, оборот к платежу
+
+
+def test_simulate_matches_evaluate_point_by_point(eng):
+    df, engine, rep = eng
+    app = {**_cash_bound(df, engine, rep), "has_rko": 1, "bank_turnover_ratio": 0.5}
+    grid = [5e5, 1e6, 2e6, 3e6, 5e6]
+    points = simulate(engine, app, "requested_amount", grid)
+    assert [p["x"] for p in points] == grid
+    for p in points:
+        # месячный оборот в банке тот же при любой сумме, как в сценарии «сумма в пределах лимита»
+        one = evaluate(engine, {**app, "requested_amount": p["x"], "bank_turnover_ratio": 0.5 * 3e6 / p["x"]})
+        assert (p["outcome"], p["offered_product"], p["offered_amount"], p["limit"]) == \
+               (one["outcome"], one["offered_product"], one["offered_amount"], one["limit"])
+        assert p["approval_probability"] == pytest.approx(one["approval_probability"])
+        assert p["rate"] == pytest.approx((one["pricing"] or {}).get("rate"))
+        assert p["all_in"] == pytest.approx((one["pricing"] or {}).get("all_in"))
+        same = one["outcome"] == "COUNTER" and one["offered_product"] == app["product"]
+        assert p["binding"] == (one["reasons"][0]["code"] if same else None)
+    assert {p["outcome"] for p in points} == {"APPROVE", "COUNTER"}  # сетка пересекает лимит
+    assert points[-1]["binding"] == "L02"
+    json.dumps(points)
+
+
+def test_simulate_prices_the_requested_amount_and_sweeps_the_term(eng):
+    df, engine, rep = eng
+    app = _cash_bound(df, engine, rep)
+    p = simulate(engine, app, "requested_amount", [5e6])[0]
+    asked = price(_derive({**app, "requested_amount": 5e6}, engine.policy), p["pd"], engine.pricing, engine.curves,
+                  engine.asof, 5e6, all_in=False)["rate"]
+    assert p["rate_requested"] == pytest.approx(asked) and p["offered_amount"] < 5e6
+    terms = simulate(engine, app, "requested_term_m", [12, 24, 36])
+    assert [t["offered_amount"] for t in terms] == sorted(t["offered_amount"] for t in terms)
+    with pytest.raises(ValueError, match="ось"):
+        simulate(engine, app, "revenue", [1e6])
