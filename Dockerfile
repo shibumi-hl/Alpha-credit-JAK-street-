@@ -8,6 +8,8 @@ RUN npm run build
 FROM python:3.13.1-slim
 WORKDIR /app
 RUN groupadd --system app && useradd --system --gid app --create-home app
+# Базовый образ отстаёт от обновлений безопасности Debian 12 (openssl, gnutls, perl) - подтягиваем их
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*
 COPY deploy/requirements-server.txt deploy/requirements-server.txt
 RUN pip install --no-cache-dir -r deploy/requirements-server.txt
 COPY --chown=app:app api/ ./api/
