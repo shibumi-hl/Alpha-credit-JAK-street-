@@ -1,0 +1,15 @@
+.git
+.venv
+**/node_modules
+web/dist
+data/
+reports/*.csv
+notebooks
+handoffs
+.agent
+docs/specs
+__pycache__
+**/__pycache__
+*.pyc
+**/*.pyc
+.env
