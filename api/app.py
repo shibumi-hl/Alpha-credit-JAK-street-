@@ -110,8 +110,9 @@ def create_app(engine: Engine = None, personas: dict = None) -> FastAPI:
                 raise HTTPException(422, "У возобновляемого продукта нет срока")
             grid = sorted({*TERMS, int(levers["requested_term_m"])})
         same = base["outcome"] == "COUNTER" and base["offered_product"] == base["product"]
+        # при маршруте лимит - другого продукта: на кривой запрошенного он вводил бы в заблуждение
         return {"axis": axis, "points": simulate(engine, application(p, levers), axis, grid),
-                "limit": base["limit"], "binding": base["reasons"][0]["code"] if same else None,
+                "limit": 0 if base["route"] else base["limit"], "binding": base["reasons"][0]["code"] if same else None,
                 "requested": levers[axis]}
 
     def _key(ask: Ask) -> tuple:

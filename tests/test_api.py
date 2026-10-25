@@ -131,3 +131,11 @@ def test_simulate_validation(client):
     term = {**body, "n": 16, "axis": "requested_term_m"}
     xs = [p["x"] for p in client.post("/api/v1/simulate", json=term).json()["points"]]
     assert 12 in xs and xs == sorted(xs)
+
+
+def test_simulate_hides_another_products_limit_on_a_route(client):
+    levers = _levers("bakery", product="overdraft", requested_amount=2_000_000, has_rko=False)
+    base = client.post("/api/v1/evaluations", json={"persona_id": "bakery", "levers": levers}).json()
+    assert base["route"]["from"] == "overdraft" and base["route"]["reasons"][0]["code"] == "E02"  # овердрафт - только с РКО
+    sim = client.post("/api/v1/simulate", json={"persona_id": "bakery", "levers": levers, "n": 16}).json()
+    assert (sim["limit"], sim["binding"]) == (0, None)  # лимит карты на кривой овердрафта вводил бы в заблуждение
