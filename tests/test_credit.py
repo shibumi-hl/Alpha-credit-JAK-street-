@@ -77,11 +77,28 @@ def test_counter_offer_names_the_limit_that_binds(kw, code):
 
 
 def test_counter_offer_reason_uses_the_priced_rate():
-    def rate_fn(product, cls, amount):  # ставка модели цены: на малые суммы дороже
-        return 0.18 if amount >= 5e6 else 0.24
+    # по ставке класса 22% денежный поток выдержал бы 26 млн - режет доля оборота 25 млн; по цене 30% - только 24 млн
+    a = app(ebit=22.73e6, requested_amount=50e6)
+    assert [r["code"] for r in decide(a, 3, REASONS, POLICY).reasons] == ["L03"]
+    priced = decide(a, 3, REASONS, POLICY, lambda product, cls, amount: 0.30)
+    assert priced.outcome == "COUNTER" and [r["code"] for r in priced.reasons] == ["L02"]
 
-    d = decide(app(requested_amount=50e6), 3, REASONS, POLICY, rate_fn)
-    assert d.outcome == "COUNTER" and [r["code"] for r in d.reasons] == ["L02"]
+
+@pytest.mark.parametrize("kw,step_at,cheap", [
+    # кредитная линия: доля оборота 15,5 млн лежит между ступенькой ставки и лимитом денежного потока по дешёвой ставке
+    ({"revenue": 62e6, "ebit": 12e6, "debt_service": 0.0}, 15e6, 0.16),
+    # экспресс на 60 мес: максимум продукта 10 млн выше ступеньки, денежный поток по дешёвой ставке - 12 млн
+    ({"product": "express", "requested_term_m": 60, "revenue": 1e9, "debt_service": 0.0,
+      "ebit": 1.25 * 12 * 12e6 * 0.10 / 12 / (1 - (1 + 0.10 / 12) ** -60)}, 8e6, 0.10),
+])
+def test_offer_stopped_by_a_rate_step_is_explained_by_cash_flow(kw, step_at, cheap):
+    def rate_fn(product, cls, amount):  # ставка прыгает на ступеньке суммы (как граница розница/корпоратив)
+        return cheap if amount < step_at else 0.30
+
+    d = decide(app(requested_amount=50e6, **kw), 3, REASONS, POLICY, rate_fn)
+    assert d.outcome == "COUNTER" and d.offered_amount < step_at  # предложение остановилось под ступенькой
+    # выше не пускает платёж по цене следующей суммы, а не доля оборота или максимум продукта
+    assert [r["code"] for r in d.reasons] == ["L02"]
 
 
 def test_limit_below_product_minimum_routes_to_smaller_product_or_rejects():

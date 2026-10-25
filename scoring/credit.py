@@ -257,9 +257,22 @@ def _offer(a, product, risk_class, policy, rate_fn):
     offered = float(min(max(amount, pr["min_amount"]), lim))
     if offered > amount:  # запрос меньше минимальной суммы продукта
         binding = "min_amount"
-    else:  # что связывает лимит - по ставке на саму предложенную сумму
-        binding = binding_limit(a, risk_class, policy, product, rate_fn(product, risk_class, lim) if rate_fn else None)
+    else:
+        binding = _stopped_by(a, risk_class, policy, product, rate_fn, lim)
     return lim, offered, binding
+
+
+def _stopped_by(a, risk_class, policy, product, rate_fn, lim) -> str:
+    """Что не пустило сумму выше lim. Обычно - наименьшее ограничение по ставке на саму lim. Но если по этой ставке
+    места больше чем на шаг округления, lim остановила ступенька ставки (бисекция в _offer): следующую сумму не пускает
+    её же цена - причина берётся по ставке на lim + шаг."""
+    rate = rate_fn(product, risk_class, lim) if rate_fn else None
+    caps = _caps(a, risk_class, policy, product, rate)
+    key = min(caps, key=caps.get)
+    step = policy["round_to"]
+    if rate_fn and caps[key] >= lim + step:
+        key = binding_limit(a, risk_class, policy, product, rate_fn(product, risk_class, lim + step))
+    return key
 
 
 def decide(a: dict, risk_class: int, reasons: list, policy: dict, rate_fn=None) -> Decision:
