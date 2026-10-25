@@ -75,6 +75,10 @@ applications = sa.Table(
     sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     sa.UniqueConstraint("owner", "idempotency_key", name="uq_owner_idempotency"),
 )
+# одна активная заявка на клиента, компанию и продукт - гарантирует база, а не только проверка перед вставкой
+_ACTIVE = applications.c.status.not_in(("REJECTED", "ISSUED", "WITHDRAWN"))
+sa.Index("uq_active_application", applications.c.owner, applications.c.persona_id, applications.c.product,
+         unique=True, postgresql_where=_ACTIVE, sqlite_where=_ACTIVE)
 events = sa.Table(
     "events", meta,
     sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
@@ -105,6 +109,14 @@ class Conveyor:
         self.db = sa.create_engine(url, pool_pre_ping=True)
         meta.create_all(self.db)
         self.delay = float(os.environ.get("PIPELINE_STEP_DELAY", "1.2") if delay is None else delay)
+
+    def ping(self) -> bool:
+        try:
+            with self.db.connect() as conn:
+                conn.execute(sa.text("SELECT 1"))
+            return True
+        except sa.exc.SQLAlchemyError:
+            return False
 
     # --- расчёт ---------------------------------------------------------------------------------------------
     def _evaluate(self, row, levers: dict = None, bki: bool = True) -> dict:
@@ -213,6 +225,18 @@ class Conveyor:
         if not consent:
             raise HTTPException(422, "Для подачи нужно согласие на запрос в бюро кредитных историй")
         p = self.personas[persona_id]
+        try:
+            return self._insert(user, persona_id, p, levers, purpose, key)
+        except sa.exc.IntegrityError:  # параллельная подача: повтор с тем же ключом или вторая активная заявка
+            if key:
+                with self.db.connect() as conn:
+                    old = conn.execute(sa.select(applications.c.id).where(
+                        applications.c.owner == user["sub"], applications.c.idempotency_key == key)).scalar()
+                if old:
+                    return old
+            raise HTTPException(409, "По этой компании и продукту уже есть заявка в работе") from None
+
+    def _insert(self, user, persona_id, p, levers, purpose, key):
         with self.db.begin() as conn:
             if key:
                 old = conn.execute(sa.select(applications.c.id).where(

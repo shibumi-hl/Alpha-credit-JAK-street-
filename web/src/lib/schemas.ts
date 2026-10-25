@@ -252,7 +252,7 @@ export const ApplicationSchema = z.looseObject({
       product: z.string(),
       product_label: z.string(),
       amount: z.number(),
-      term_m: z.number(),
+      term_m: z.number().nullable(), // у карты и овердрафта срока нет
       rate: z.number().nullable(),
       all_in: z.number().nullable(),
       monthly_payment: z.number().nullable(),
@@ -264,7 +264,7 @@ export const ApplicationSchema = z.looseObject({
     .looseObject({
       number: z.string(),
       amount: z.number(),
-      term_m: z.number(),
+      term_m: z.number().nullable(),
       rate: z.number().nullable(),
       monthly_payment: z.number().nullable(),
       issued_at: z.string(),

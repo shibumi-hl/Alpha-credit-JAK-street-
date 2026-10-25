@@ -93,7 +93,7 @@ export function OfferCard({ o }: { o: NonNullable<Application['offer']> }) {
         </div>
         <div>
           <dt>Срок</dt>
-          <dd>{months(o.term_m)}</dd>
+          <dd>{o.term_m == null ? 'возобновляемый' : months(o.term_m)}</dd>
         </div>
         <div>
           <dt>Ставка</dt>
@@ -130,7 +130,7 @@ export function LoanCard({ l }: { l: NonNullable<Application['loan']> }) {
         </div>
         <div>
           <dt>Срок</dt>
-          <dd>{months(l.term_m)}</dd>
+          <dd>{l.term_m == null ? 'возобновляемый' : months(l.term_m)}</dd>
         </div>
         <div>
           <dt>Ставка</dt>

@@ -155,3 +155,32 @@ def test_news_is_personal(client):
     builder = client.get("/api/v1/news?persona_id=docs").json()
     assert seller and builder and {n["id"] for n in seller} != {n["id"] for n in builder}
     assert all(n["why"] for n in seller)
+
+
+def test_database_rejects_second_active_application_even_without_the_check(client, monkeypatch):
+    """Гонка двух подач: обе прошли проверку «нет активной» - вторую отклоняет уникальный индекс, ответ 409."""
+    h = login(client, "client")
+    assert submit(client, h, "marina").status_code == 201
+    conv = client.app.state.conveyor
+    real = conv.db.begin
+
+    class SkipActiveCheck:  # имитирует транзакцию, которая не увидела первую заявку
+        def __enter__(self):
+            self.cm = real()
+            conn = self.cm.__enter__()
+            orig = conn.execute
+            conn.execute = lambda q, *a, **k: type("R", (), {"scalar": lambda _: None})() \
+                if "status NOT IN" in str(q) else orig(q, *a, **k)
+            return conn
+
+        def __exit__(self, *exc):
+            return self.cm.__exit__(*exc)
+
+    monkeypatch.setattr(conv.db, "begin", lambda: SkipActiveCheck())
+    assert submit(client, h, "marina").status_code == 409
+
+
+def test_revolving_offer_has_no_term(client):
+    h = login(client, "client")
+    a = settle(client, h, submit(client, h, "young").json()["id"])
+    assert a["offer"]["product"] == "card" and a["offer"]["term_m"] is None

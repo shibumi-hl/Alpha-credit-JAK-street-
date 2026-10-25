@@ -1,6 +1,6 @@
 // Подтверждение подачи: цель и согласие на запрос в БКИ, POST с Idempotency-Key, переход в трекер.
 import { useMutation } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { conveyor } from '../lib/api';
 import { go } from '../lib/route';
 import type { Levers } from '../lib/schemas';
@@ -13,12 +13,18 @@ interface Props {
   onClose(): void;
 }
 
+// randomUUID есть только в защищённом контексте (HTTPS, localhost); по HTTP на IP стенда — getRandomValues
+function idempotencyKey(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 export function SubmitBlock({ personaId, levers, story, onConsent, onClose }: Props) {
   const [purpose, setPurpose] = useState(story);
   const [consent, setConsent] = useState(!!levers.bki_consent);
-  const key = useRef(crypto.randomUUID());
+  const [key] = useState(idempotencyKey); // один ключ на форму: повторное нажатие не создаёт вторую заявку
   const m = useMutation({
-    mutationFn: () => conveyor.submit({ persona_id: personaId, levers: { ...levers, bki_consent: true }, purpose: purpose.trim(), bki_consent: true }, key.current),
+    mutationFn: () => conveyor.submit({ persona_id: personaId, levers: { ...levers, bki_consent: true }, purpose: purpose.trim(), bki_consent: true }, key),
     onSuccess: (a) => go(`/applications/${a.id}`),
   });
   return (

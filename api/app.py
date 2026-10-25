@@ -178,6 +178,8 @@ def create_app(engine: Engine = None, personas: dict = None) -> FastAPI:
 
     @app.get("/api/health")
     def health():
+        if not conveyor.ping():  # база недоступна - контейнер нездоров, оркестратор его перезапустит
+            return JSONResponse(status_code=503, content={"ok": False, "detail": "База данных недоступна"})
         return {"ok": True, "asof": str(engine.asof)}
 
     @app.get("/api/v1/meta")
