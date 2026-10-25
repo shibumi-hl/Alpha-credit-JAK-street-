@@ -103,6 +103,25 @@ py scripts/score_company.py --json app.json --whatif --format json    # отве
 
 Ноутбук для демо: `notebooks/sme_scoring_demo.ipynb` (данные — `SCORING_DATA_DIR` или `data/`).
 
+## Песочница кредита (веб)
+
+Дашборд «Песочница кредита» по `docs/dashboard-igor-spec.md` и `DESIGN.md`: API `api/` (FastAPI) поверх движка и
+фронт `web/` (React + Vite). Демо-компании вымышлены (`demo/personas/`, ИНН с несуществующим регионом 00): реальные
+компании выборки в песочницу не попадают, к ним приклеены синтетические БКИ и дефолты.
+
+```
+py scripts/check_personas.py                 # исходы демо-компаний и числа Марины из защиты на data/scoring/engine.pkl
+py -m uvicorn --factory api.app:create_app --port 3100   # API (ENGINE_PATH - путь к engine.pkl), Swagger /api/docs
+cd web; npm ci; npm run dev                  # http://localhost:5173, /api проксируется на 3100
+cd web; npm test; npm run build              # тесты и сборка фронта
+cd web; npx playwright test                  # золотой путь Марины и все демо-компании (нужны API и Vite)
+bash scripts/deploy.sh                       # деплой на VPS (первый раз --setup); DEPLOY_HOST, DEPLOY_DOMAIN, DEPLOY_KEY, ENGINE_PATH - в .env
+```
+
+На сервере: код в `/opt/alfa-credit`, модель `/var/lib/alfa-credit/engine.pkl`, сервис `alfa-credit` (uvicorn на
+127.0.0.1:3100, `MemoryMax` 450 МБ), сайт Caddy `/etc/caddy/sites/alfa-credit.caddy`. Версии библиотек на сервере —
+ровно `deploy/requirements-server.txt`: иначе pickle движка не загрузится.
+
 ## Структура
 
 ```
@@ -112,6 +131,10 @@ config/    кредитная политика и параметры цены
 notebooks/ демо
 reports/   отчёты скоркарты
 tests/     тесты (фикстуры синтетические, кроме публичной G-кривой Мосбиржи)
+api/       HTTP API песочницы: контракт ответов, демо-компании
+demo/      вымышленные демо-компании песочницы
+web/       фронт песочницы (React + Vite), e2e на Playwright
+deploy/    настройка VPS, systemd, Caddy, точные версии для сервера
 ```
 
 ## Ограничения

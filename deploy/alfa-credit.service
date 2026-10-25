@@ -1,0 +1,29 @@
+[Unit]
+Description=МойАльфаКредит: API песочницы кредита
+After=network.target
+
+[Service]
+User=alfacredit
+Group=alfacredit
+WorkingDirectory=/opt/alfa-credit/app
+Environment=ENGINE_PATH=/var/lib/alfa-credit/engine.pkl
+Environment=PYTHONUNBUFFERED=1
+# optbinning импортирует matplotlib, ему нужен каталог для кэша
+Environment=MPLCONFIGDIR=/tmp/matplotlib
+ExecStart=/opt/alfa-credit/venv/bin/uvicorn --factory api.app:create_app --host 127.0.0.1 --port 3100 --workers 1 --no-access-log
+Restart=on-failure
+RestartSec=3
+# сервер общий с «Легко с Ana»: 1 ГБ RAM и 1 vCPU на двоих
+MemoryMax=450M
+CPUQuota=80%
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

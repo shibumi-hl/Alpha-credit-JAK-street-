@@ -1,0 +1,3 @@
+# серверные скрипты и конфиги - только LF: bash и systemd на сервере не читают CRLF
+*.sh text eol=lf
+deploy/** text eol=lf

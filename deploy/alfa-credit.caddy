@@ -1,0 +1,26 @@
+# МойАльфаКредит, песочница кредита: статика из /opt/alfa-credit/web, API на 127.0.0.1:3100.
+# {DOMAIN} подставляет install.sh из /etc/alfa-credit/domain.
+{DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		X-Robots-Tag "noindex"
+		-Server
+	}
+
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3100
+	}
+
+	handle {
+		root * /opt/alfa-credit/web
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		header /index.html Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}
