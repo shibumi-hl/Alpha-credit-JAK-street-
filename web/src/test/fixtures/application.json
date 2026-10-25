@@ -1,0 +1,115 @@
+{
+ "id": "7d1c2b9e-0000-4000-8000-000000000001",
+ "persona_id": "marina",
+ "company": {
+  "name": "ООО «Марина»",
+  "inn": "0012345678"
+ },
+ "product": "working_capital",
+ "product_label": "Оборотный кредит",
+ "levers": {
+  "product": "express",
+  "requested_amount": 6000000,
+  "requested_term_m": 12,
+  "has_rko": 0,
+  "bank_turnover_month_rub": 0,
+  "guarantee": 0,
+  "marketplace": 1,
+  "insurance": 1,
+  "subscription": 0,
+  "bki_consent": false
+ },
+ "purpose": "Закупка товара к сезону",
+ "status": "SIGNING",
+ "status_label": "Подписание",
+ "whose_turn": "client",
+ "next_step": "Введите код подписи, чтобы получить деньги",
+ "steps": [
+  {
+   "status": "SUBMITTED",
+   "label": "Подана",
+   "state": "done"
+  },
+  {
+   "status": "DATA_CHECK",
+   "label": "Проверка данных",
+   "state": "done"
+  },
+  {
+   "status": "SCORING",
+   "label": "Скоринг",
+   "state": "done"
+  },
+  {
+   "status": "APPROVED",
+   "label": "Одобрено",
+   "state": "done"
+  },
+  {
+   "status": "SIGNING",
+   "label": "Подписание",
+   "state": "current"
+  },
+  {
+   "status": "ISSUED",
+   "label": "Выдано",
+   "state": "todo"
+  }
+ ],
+ "created_at": "2026-10-25T10:00:00Z",
+ "updated_at": "2026-10-25T10:00:05Z",
+ "decision": {
+  "outcome": "APPROVE",
+  "title": "Одобрено",
+  "reasons": [
+   {
+    "code": "P01",
+    "category": "Стабильная выручка"
+   }
+  ],
+  "requests": [],
+  "route": null,
+  "by": "system",
+  "note": null
+ },
+ "offer": {
+  "product": "working_capital",
+  "product_label": "Оборотный кредит",
+  "amount": 6000000,
+  "term_m": 24,
+  "rate": 0.214,
+  "all_in": 0.231,
+  "monthly_payment": 309000
+ },
+ "documents": [
+  {
+   "name": "Справка об оборотах",
+   "status": "requested"
+  }
+ ],
+ "sign_code": "4821",
+ "loan": null,
+ "events": [
+  {
+   "at": "2026-10-25T10:00:00Z",
+   "from": null,
+   "to": "SUBMITTED",
+   "to_label": "Подана",
+   "actor": "client",
+   "note": null
+  },
+  {
+   "at": "2026-10-25T10:00:03Z",
+   "from": "SCORING",
+   "to": "APPROVED",
+   "to_label": "Одобрено",
+   "actor": "system",
+   "note": "Автоматическое решение"
+  }
+ ],
+ "actions": [
+  "sign",
+  "withdraw"
+ ],
+ "extra_field": 1
+}
