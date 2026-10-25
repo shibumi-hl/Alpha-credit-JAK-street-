@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from scoring import synth
-from scoring.approval import (BASE, CATEGORIES, CONTINUOUS, FACTOR, LABELS, REF_RATE, SIGNS, ApprovalModel,
+from scoring.approval import (BASE, CATEGORIES, CONTINUOUS, FACTOR, GROUP, LABELS, REF_RATE, SIGNS, ApprovalModel,
                               approval_target, bin_application, cash_flow, cross_validate, monthly_payment,
                               train_approval)
 from scoring.assess import assess
@@ -123,6 +123,41 @@ def test_holdout_metrics_show_what_pd_and_cash_flow_add(fitted):
     assert (cls.прогноз - cls.факт).abs().max() < 0.1  # шанс откалиброван и внутри классов риска
 
 
+def test_chance_is_calibrated_across_headroom_bands(fitted):
+    _, _, _, _, rep = fitted
+    b = rep["bands"]  # отложенные 30% по полосам запаса денежного потока к платежу
+    assert {"запас", "n", "факт", "прогноз"} <= set(b.columns) and b.n.sum() == rep["n_test"]
+    big = b[b.n >= 50]
+    assert {"0.4–0.5×", "0.5–0.6×"} <= set(big.запас.astype(str))  # полосы у самого порога 0,5× - тоже проверены
+    assert (big.прогноз - big.факт).abs().max() < 0.1
+
+
+def test_bands_count_decisions_with_unknown_headroom(fitted):
+    df, _, y, _, _ = fitted
+    decided = y.index[y.notna()]
+    gaps = df.assign(ebit=df.ebit.mask(df.index.isin(decided[::7]), np.nan))  # у части решений нет EBIT
+    _, rep = train_approval(gaps, y, seed=3, cv=0)
+    b = rep["bands"].set_index(rep["bands"].запас.astype(str))
+    assert b.n.sum() == rep["n_test"] and b.loc["нет данных", "n"] > 0
+
+
+def test_crossing_half_a_payment_is_a_step(fitted):
+    df, _, _, m, _ = fitted
+    row = df.iloc[[0]].assign(product="secured", pd=0.01, debt_service=0.0, requested_term_m=24, has_rko=0,
+                              bank_turnover_ratio=0.0, marketplace=0, guarantee=0)
+    pay = 12 * monthly_payment(float(row.requested_amount.iloc[0]), REF_RATE, 24)
+
+    def p(cover):
+        return m.predict(row.assign(ebit=1.25 * cover * pay))[0]
+
+    jump = p(0.501) - p(0.499)  # контрпредложение от половины суммы - уже одобрение
+    assert jump > 0.05 and jump > 20 * (p(0.801) - p(0.799))
+    assert p(0.3) < p(0.45) < p(0.499) and p(0.501) < p(0.7) < p(1.0)  # и плавный рост по обе стороны
+    shown = lambda c: {x["признак"]: x["категория"] for x in m.explain(row.assign(ebit=1.25 * c * pay).iloc[0])}  # noqa: E731
+    assert shown(0.499)[LABELS["cash_cover"]] == "0.49× платежа"  # до порога не округляется до 0.5×
+    assert shown(0.501)[LABELS["cash_cover"]] == "0.50× платежа"
+
+
 def test_soft_mode_imputes_missing_inputs_neutrally(fitted):
     df, _, y, _, _ = fitted
     sub, ys = df[y.notna()], y[y.notna()]
@@ -190,6 +225,16 @@ def test_cash_flow_multiples_match_a_hand_calculation():
     assert cf["pd"] == 0.02
 
 
+def test_payment_uses_the_application_rate_when_known():
+    # та же заявка, ставка модели цены 15%: аннуитет 108 309,97 руб.; нет ставки - опорная 22,5% (112 602,22)
+    app = pd.DataFrame({"revenue": [12e6] * 2, "ebit": [2.5e6] * 2, "debt_service": [0.5e6] * 2,
+                        "requested_amount": [1.2e6] * 2, "requested_term_m": [12] * 2, "pd": [0.02] * 2,
+                        "rate": [0.15, np.nan]})
+    cf = cash_flow(app)
+    assert cf.cover[0] == pytest.approx(1.5e6 / (12 * 108_309.97), rel=1e-6)
+    assert cf.cover[1] == pytest.approx(1.5e6 / (12 * 112_602.22), rel=1e-6)
+
+
 def test_infinite_inputs_count_as_missing(fitted):
     df, _, _, m, _ = fitted
     row = df.iloc[[0]]
@@ -240,7 +285,9 @@ def test_explanation_sums_to_score(fitted):
     df, _, _, m, _ = fitted
     row = df.iloc[0]
     parts = m.explain(row)
-    assert {x["признак"] for x in parts} == {LABELS[f] for f in [*CATEGORIES, *CONTINUOUS]}
+    # три слагаемых запаса (до 0,5×, 0,5–1× и ступень) клиенту - одной строкой
+    assert {x["признак"] for x in parts} == {LABELS[GROUP.get(f, f)] for f in [*CATEGORIES, *CONTINUOUS]}
+    assert len(parts) == len(CATEGORIES) + len(CONTINUOUS) - 2
     assert [abs(p["баллы"]) for p in parts] == sorted((abs(p["баллы"]) for p in parts), reverse=True)
     total = BASE + FACTOR * m.intercept + sum(p["баллы"] for p in parts)
     assert total == pytest.approx(m.score(df.iloc[[0]])[0])

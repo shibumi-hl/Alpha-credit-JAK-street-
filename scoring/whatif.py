@@ -16,7 +16,7 @@ import pandas as pd
 from scoring.approval import VERSION as APPROVAL_VERSION, ApprovalModel, approval_target, train_approval
 from scoring.assess import assess
 from scoring.credit import _num, load_policy, validate
-from scoring.pricing import load_pricing
+from scoring.pricing import load_pricing, price
 from scoring.scorecard import ScoreModel, train
 from scoring.synth import FEATURES
 
@@ -69,6 +69,13 @@ def _py(x):
 FLAGS = ("has_rko", "marketplace", "guarantee", "subscription", "insurance")
 
 
+def _rates(df: pd.DataFrame, pds, pricing: dict, curves, asof) -> list:
+    """Ставка модели цены по запрошенным продукту и сумме: по ней модель одобрения считает платёж в запасе денежного
+    потока, как кредитная логика - DSCR-лимит."""
+    return [price(a, float(p), pricing, curves, asof, float(a["requested_amount"]), all_in=False)["rate"]
+            for a, p in zip(df.to_dict("records"), pds)]
+
+
 def _derive(app: dict, policy: dict) -> dict:
     """Заявка → полный набор полей: продукт по умолчанию, флаги 0, нет признака - пусто (NaN), производные поля.
     Некорректная заявка (продукт, сумма, срок) - ValueError."""
@@ -102,7 +109,8 @@ class Engine:
         model, rep = train(df, seed=seed, cv=cv)
         out = assess(df, model, policy, pricing=pricing, curves=curves, asof=asof)
         y = approval_target(out, df.requested_amount)
-        scored = df.assign(pd=out.pd.to_numpy())  # PD скоркарты - вход модели одобрения
+        # PD скоркарты и ставка модели цены - входы модели одобрения
+        scored = df.assign(pd=out.pd.to_numpy(), rate=_rates(df, out.pd, pricing, curves, asof))
         appr, appr_rep = train_approval(scored, y, groups=out.risk_class, seed=seed, cv=cv, min_dscr=policy["min_dscr"])
         out["approval_probability"] = appr.predict(scored, stopped=(out.stop_codes.str.len() > 0).to_numpy())
         eng = cls(model, appr, policy, pricing, curves, asof)
@@ -129,7 +137,7 @@ def evaluate(engine: Engine, app: dict) -> dict:
     r = assess(df, engine.scorecard, engine.policy, pricing=engine.pricing, curves=engine.curves,
                asof=engine.asof).iloc[0]
     stopped = len(r.stop_codes) > 0
-    scored = df.assign(pd=r.pd)
+    scored = df.assign(pd=r.pd, rate=_rates(df, [r.pd], engine.pricing, engine.curves, engine.asof))
     imputed = engine.approval.imputed(scored)[0]  # soft-режим: чего не хватило, заменено средним
     return _py({
         "inn": a.get("inn"), "score": r.score, "pd": r.pd, "risk_class": r.risk_class,
