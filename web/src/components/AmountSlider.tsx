@@ -90,7 +90,8 @@ export function AmountSlider({ id, label, min, max, value, step, log = true, for
       </div>
       {log && (
         <div className="slider-ticks t-caption muted" aria-hidden>
-          {TICKS.filter((t) => t > min * 1.15 && t < max / 1.15).map((t) => (
+          {/* насечки у самого края не подписываем: подпись вылезала за трек */}
+          {TICKS.filter((t) => t > min * 1.6 && t < max / 1.6).map((t) => (
             <span key={t} style={{ left: `${frac(t) * 100}%` }}>
               {rub(t).replace(/ ₽$/, '')}
             </span>
