@@ -31,14 +31,14 @@ sys.path.insert(0, str(ROOT))
 from scoring.approval import REF_RATE  # noqa: E402
 from scoring.gcurve import CurveStore  # noqa: E402
 from scoring.assess import OUTCOMES  # noqa: E402
-from scoring.credit import ELIGIBILITY, STOPS  # noqa: E402
+from scoring.credit import ELIGIBILITY, STOPS, limit_codes, load_policy  # noqa: E402
 from scoring.pricing import load_pricing  # noqa: E402
 from scoring.realcheck import validate as validate_real, real_label  # noqa: E402
 from scoring.reasons import CATEGORIES  # noqa: E402
 from scoring.whatif import Engine  # noqa: E402
 
 ENC = "utf-8-sig"
-CODES = {**CATEGORIES, **STOPS, **ELIGIBILITY, "L01": "лимит ниже минимальной суммы"}
+CODES = {**CATEGORIES, **STOPS, **ELIGIBILITY, **limit_codes(load_policy())}
 
 
 def _md(df: pd.DataFrame, floatfmt=".4f") -> str:

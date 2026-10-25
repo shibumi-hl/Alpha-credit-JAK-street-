@@ -4,7 +4,9 @@
 Лимит = min(доля годового оборота по классу риска, сумма аннуитета на срок заявки, которую
 выдерживает EBIT при DSCR ≥ min_dscr с учётом текущего обслуживания долга, max_amount).
 Исход: стоп-фактор → REJECT; спорные данные → REQUEST_INFO; запрос < минимальной суммы продукта → COUNTER на
-минимальную; запрос ≤ лимита → APPROVE; иначе COUNTER на лимит. Если продукт недоступен (возраст, нет РКО или
+минимальную; запрос ≤ лимита → APPROVE; иначе COUNTER на лимит. Контрпредложение по запрошенному продукту объясняет
+то, что ограничило сумму (L02 денежный поток, L03 доля оборота, L04 максимум продукта, L05 обороты в банке у
+овердрафта, L06 минимальная сумма), а не баллы скоркарты. Если продукт недоступен (возраст, нет РКО или
 маркетплейса, лимит ниже минимума) - маршрут на первый подходящий из route_order (карта, кредит селлерам,
 залоговый) с причиной; ничего не подошло - REJECT с причинами (E01-E03, L01).
 Параметры - config/credit_policy.json.
@@ -27,6 +29,21 @@ STOPS = {
 }
 LIMIT_REASON = {"code": "L01", "category": "денежного потока не хватает даже на минимальную сумму", "loss": None,
                 "factors": ["dscr"]}
+# Что ограничило сумму контрпредложения: ограничение лимита → (код, категория для клиента, факторы)
+LIMITS = {
+    "dscr": ("L02", "денежного потока с запасом DSCR ≥ {dscr} хватает на платёж только по этой сумме", ["dscr"]),
+    "turnover": ("L03", "сумма ограничена долей годового оборота для вашего класса риска", ["revenue"]),
+    "max": ("L04", "это максимальная сумма продукта", []),
+    "bank_turnover": ("L05", "овердрафт ограничен оборотами по счёту в банке", ["bank_turnover_ratio"]),
+    "min_amount": ("L06", "запрошенная сумма меньше минимальной для продукта", []),
+}
+
+
+
+def limit_codes(policy: dict) -> dict:
+    """Код → категория для причин лимита L01–L06 (для отчётов)."""
+    reasons = [limit_reason(b, policy) for b in LIMITS]
+    return {"L01": LIMIT_REASON["category"], **{r["code"]: r["category"] for r in reasons}}
 ELIGIBILITY = {
     "E01": "бизнес слишком молодой для продукта",
     "E02": "нужен расчётный счёт в банке",
@@ -109,12 +126,13 @@ def missing_data(a: dict) -> list:
     return list(dict.fromkeys(KEY_DATA[k] for k in gaps))
 
 
-def limit(a: dict, risk_class: int, policy: dict, product: str = None, rate: float = None) -> float:
-    """min(доля оборота по классу × множитель продукта, аннуитет при DSCR ≥ min_dscr по ставке rate, макс. продукта);
-    овердрафт ещё и не больше доли среднемесячного оборота в банке."""
+def _caps(a: dict, risk_class: int, policy: dict, product: str = None, rate: float = None) -> dict | None:
+    """Ограничения лимита по продукту: доля оборота по классу × множитель продукта (turnover), максимум продукта
+    (max), у овердрафта - доля среднемесячного оборота в банке (bank_turnover), сумма под платёж при DSCR ≥ min_dscr
+    по ставке rate (dscr). None - класс риска вне политики."""
     k = str(int(risk_class))
     if k not in policy["turnover_share_by_class"]:
-        return 0.0
+        return None
     pr = policy["products"][product or _product(a, policy)]
     mult = pr["turnover_mult"]
     if a.get("guarantee"):  # гарантия Корпорации МСП заменяет часть залога
@@ -123,15 +141,36 @@ def limit(a: dict, risk_class: int, policy: dict, product: str = None, rate: flo
         mult *= policy["bank_turnover_bonus"]["mult"]  # банк видит обороты - даёт больше
     if a.get("marketplace"):
         mult *= policy["marketplace_limit_mult"]  # выручка подтверждена данными маркетплейса
-    caps = [policy["turnover_share_by_class"][k] * mult * a["revenue"], pr["max_amount"]]
+    caps = {"turnover": policy["turnover_share_by_class"][k] * mult * a["revenue"], "max": pr["max_amount"]}
     if "bank_turnover_share" in pr:
-        caps.append(pr["bank_turnover_share"] * a.get("bank_turnover_ratio", 0) * a["requested_amount"])
+        caps["bank_turnover"] = pr["bank_turnover_share"] * a.get("bank_turnover_ratio", 0) * a["requested_amount"]
     rate = policy["rate_by_class"][k] if rate is None else rate
     capacity = a["ebit"] / policy["min_dscr"] - a["debt_service"]
-    caps.append(annuity_principal(capacity, rate, int(a["requested_term_m"])))
-    lim = max(0.0, min(caps))
+    caps["dscr"] = annuity_principal(capacity, rate, int(a["requested_term_m"]))
+    return caps
+
+
+def limit(a: dict, risk_class: int, policy: dict, product: str = None, rate: float = None) -> float:
+    """Наименьшее из ограничений _caps, округлённое вниз до round_to."""
+    caps = _caps(a, risk_class, policy, product, rate)
+    if caps is None:
+        return 0.0
+    lim = max(0.0, min(caps.values()))
     step = policy["round_to"]
     return math.floor(lim / step) * step if lim >= step else lim
+
+
+def binding_limit(a: dict, risk_class: int, policy: dict, product: str = None, rate: float = None) -> str | None:
+    """Какое ограничение _caps задаёт лимит (наименьшее) - объяснение контрпредложения."""
+    caps = _caps(a, risk_class, policy, product, rate)
+    return min(caps, key=caps.get) if caps else None
+
+
+def limit_reason(binding: str, policy: dict) -> dict:
+    """Причина контрпредложения: что ограничило сумму, в формате кодов причин."""
+    code, text, factors = LIMITS[binding]
+    return {"code": code, "category": text.format(dscr=f"{policy['min_dscr']:g}".replace(".", ",")), "loss": None,
+            "factors": list(factors)}
 
 
 def eligibility(a: dict, product: str, policy: dict) -> list:
@@ -215,7 +254,25 @@ def _offer(a, product, risk_class, policy, rate_fn):
             lim = lo
     if lim < pr["min_amount"]:
         return None
-    return lim, float(min(max(float(a["requested_amount"]), pr["min_amount"]), lim))
+    offered = float(min(max(amount, pr["min_amount"]), lim))
+    if offered > amount:  # запрос меньше минимальной суммы продукта
+        binding = "min_amount"
+    else:
+        binding = _stopped_by(a, risk_class, policy, product, rate_fn, lim)
+    return lim, offered, binding
+
+
+def _stopped_by(a, risk_class, policy, product, rate_fn, lim) -> str:
+    """Что не пустило сумму выше lim. Обычно - наименьшее ограничение по ставке на саму lim. Но если по этой ставке
+    места больше чем на шаг округления, lim остановила ступенька ставки (бисекция в _offer): следующую сумму не пускает
+    её же цена - причина берётся по ставке на lim + шаг."""
+    rate = rate_fn(product, risk_class, lim) if rate_fn else None
+    caps = _caps(a, risk_class, policy, product, rate)
+    key = min(caps, key=caps.get)
+    step = policy["round_to"]
+    if rate_fn and caps[key] >= lim + step:
+        key = binding_limit(a, risk_class, policy, product, rate_fn(product, risk_class, lim + step))
+    return key
 
 
 def decide(a: dict, risk_class: int, reasons: list, policy: dict, rate_fn=None) -> Decision:
@@ -235,15 +292,17 @@ def decide(a: dict, risk_class: int, reasons: list, policy: dict, rate_fn=None) 
     if req:
         return Decision("REQUEST_INFO", offer[0] if offer else 0.0, 0.0, [], reasons, req, product=want)
     if offer:
-        lim, amount = offer
-        outcome = "APPROVE" if amount == float(a["requested_amount"]) else "COUNTER"
-        return Decision(outcome, lim, amount, [], reasons, product=want, offered_product=want)
+        lim, amount, binding = offer
+        if amount == float(a["requested_amount"]):  # одобрение: причины - что снижает балл скоркарты
+            return Decision("APPROVE", lim, amount, [], reasons, product=want, offered_product=want)
+        # контрпредложение объясняет то, что ограничило сумму, а не баллы скоркарты
+        return Decision("COUNTER", lim, amount, [], [limit_reason(binding, policy)], product=want, offered_product=want)
     why = gaps or [LIMIT_REASON]
     for alt in policy["route_order"]:
         if alt == want or eligibility(a, alt, policy):
             continue
         alt_offer = _offer(a, alt, risk_class, policy, rate_fn)
-        if alt_offer:
+        if alt_offer:  # маршрут: почему не подошёл запрошенный продукт - в route
             return Decision("COUNTER", alt_offer[0], alt_offer[1], [], reasons, product=want, offered_product=alt,
                             route={"from": want, "to": alt, "reasons": why})
     extra = [LIMIT_REASON] if gaps else []

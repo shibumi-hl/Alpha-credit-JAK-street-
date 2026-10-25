@@ -41,6 +41,10 @@ SCENARIOS = {
                         lambda a, b: {"requested_amount": b["limit"],  # месячный оборот в банке тот же
                                       "bank_turnover_ratio": float(a.get("bank_turnover_ratio") or 0)
                                       * float(a["requested_amount"]) / b["limit"]}),
+    # меньше платёж - денежного потока хватает на большую сумму; овердрафту и карте срок не нужен (возобновляемые)
+    "term_24": ("Взять на 24 месяца",
+                lambda a, b: a["product"] not in ("overdraft", "card") and float(a["requested_term_m"]) < 24,
+                lambda a, b: {"requested_term_m": 24}),
     "marketplace": ("Подключить данные маркетплейса",
                     lambda a, b: not a.get("marketplace") and a.get("okved_section") == "G",
                     lambda a, b: {"marketplace": 1}),
