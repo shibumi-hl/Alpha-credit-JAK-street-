@@ -90,6 +90,39 @@ def test_soft_mode_without_credit_history(eng):
     assert 0 < r["approval_probability"] < 1
 
 
+def _cash_bound(df, engine, rep):
+    """Заявка, где сумму ограничивает денежный поток: экспресс 12 мес, EBIT на ~60% платежа по запросу."""
+    out = rep["assessed"]
+    i = out.index[(out.risk_class <= 3) & (out.stop_codes.str.len() == 0)][0]
+    amount = 3e6
+    return _derive({**df.loc[i].to_dict(), "product": "express", "requested_amount": amount, "requested_term_m": 12,
+                    "revenue": 20 * amount, "debt_service": 0.0, "ebit": 1.25 * 0.6 * 12 * monthly_payment(amount, 0.2, 12),
+                    "bki_current_dpd": 0, "bki_max_dpd_12m": 0, "tax_debt_to_revenue": 0.0, "status": "ACTIVE"},
+                   engine.policy)
+
+
+def test_cash_bound_counter_offer_is_explained_by_cash_flow(eng):
+    df, engine, rep = eng
+    r = evaluate(engine, _cash_bound(df, engine, rep))
+    assert r["outcome"] == "COUNTER" and r["offered_product"] == "express" and r["offered_amount"] < 3e6
+    assert [x["code"] for x in r["reasons"]] == ["L02"]  # причина - денежный поток, а не баллы скоркарты
+
+
+def test_longer_term_scenario_raises_a_cash_bound_offer(eng):
+    df, engine, rep = eng
+    app = _cash_bound(df, engine, rep)
+    out = whatif(engine, app)
+    sc = {s["key"]: s for s in out["scenarios"]}
+    assert "term_24" in sc
+    longer = sc["term_24"]
+    assert longer["offered_amount"] > out["base"]["offered_amount"]  # платёж меньше - денежного потока хватает на больше
+    assert longer["delta_approval_pp"] > 0
+    for kw in ({"product": "card", "requested_amount": 5e5}, {"product": "overdraft"}, {"requested_term_m": 24},
+               {"requested_term_m": 36}):
+        keys = {s["key"] for s in whatif(engine, {**app, **kw})["scenarios"]}
+        assert "term_24" not in keys, kw  # возобновляемым продуктам и длинным срокам сценарий не нужен
+
+
 def test_headroom_payment_uses_the_priced_rate(eng):
     df, engine, rep = eng
     out = rep["assessed"]

@@ -51,13 +51,37 @@ def test_annuity_principal_inverts_payment():
 def test_within_limit_is_approved_for_requested_amount():
     d = decide(app(requested_amount=1e6), 2, REASONS, POLICY)
     assert d.outcome == "APPROVE" and d.offered_amount == 1e6 and d.limit >= 1e6
+    assert d.reasons == REASONS  # одобрение: что снижает балл скоркарты
 
 
 def test_above_limit_gets_counter_offer_at_limit():
     d = decide(app(requested_amount=50e6), 3, REASONS, POLICY)
     assert d.outcome == "COUNTER"
     assert d.offered_amount == d.limit < 50e6
-    assert d.reasons == REASONS
+    # EBIT 10 млн при текущих платежах 2 млн: связывает денежный поток, а не баллы скоркарты
+    assert [r["code"] for r in d.reasons] == ["L02"] and d.reasons[0]["factors"] == ["dscr"]
+
+
+@pytest.mark.parametrize("kw,code", [
+    ({"requested_amount": 50e6}, "L02"),  # денежный поток при DSCR ≥ 1,25
+    ({"ebit": 1e9, "requested_amount": 50e6}, "L03"),  # доля оборота по классу: 25% от 100 млн
+    ({"product": "express", "ebit": 1e9, "revenue": 1e9, "requested_amount": 20e6}, "L04"),  # максимум продукта 10 млн
+    ({"product": "overdraft", "has_rko": 1, "bank_turnover_ratio": 1.0, "ebit": 1e9, "requested_amount": 3e6},
+     "L05"),  # овердрафт - половина среднемесячного оборота в банке
+    ({"ebit": 1e9, "requested_amount": 66_000}, "L06"),  # меньше минимальной суммы продукта
+])
+def test_counter_offer_names_the_limit_that_binds(kw, code):
+    d = decide(app(**kw), 3, REASONS, POLICY)
+    assert d.outcome == "COUNTER" and d.offered_product == d.product
+    assert [r["code"] for r in d.reasons] == [code]  # одна причина - то, что ограничило сумму, без кодов скоркарты
+
+
+def test_counter_offer_reason_uses_the_priced_rate():
+    def rate_fn(product, cls, amount):  # ставка модели цены: на малые суммы дороже
+        return 0.18 if amount >= 5e6 else 0.24
+
+    d = decide(app(requested_amount=50e6), 3, REASONS, POLICY, rate_fn)
+    assert d.outcome == "COUNTER" and [r["code"] for r in d.reasons] == ["L02"]
 
 
 def test_limit_below_product_minimum_routes_to_smaller_product_or_rejects():
@@ -82,6 +106,7 @@ def test_small_tax_debt_or_short_history_in_weak_class_requests_info():
 def test_request_below_minimum_amount_is_not_approved_as_is():
     d = decide(app(ebit=1e9, requested_amount=66_000), 2, REASONS, POLICY)
     assert d.outcome == "COUNTER" and d.offered_amount == POLICY["products"]["credit_line"]["min_amount"]
+    assert [r["code"] for r in d.reasons] == ["L06"]
     d = decide(app(ebit=2.4e6, requested_amount=66_000), 2, REASONS, POLICY)  # мощности нет
     assert d.outcome == "REJECT" and d.reasons[0]["code"] == "L01"
 
