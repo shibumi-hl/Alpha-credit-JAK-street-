@@ -1,4 +1,4 @@
-FROM node:22.11.0-alpine AS web
+FROM node:22.12.0-slim AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
