@@ -11,3 +11,4 @@ handoffs/
 docs/specs/
 reports/*.csv
 .env
+.vuln-scan/
