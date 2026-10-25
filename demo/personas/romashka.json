@@ -1,0 +1,45 @@
+{
+  "id": "romashka",
+  "name": "ООО «Ромашка»",
+  "inn": "0060000005",
+  "tagline": "Цветочные магазины · 4 года · выручка 36 млн ₽",
+  "story": "Оборотный кредит 2 млн ₽ на закупку к 8 Марта; проверка сбоя бюро кредитных историй",
+  "okved_name": "Торговля розничная цветами в специализированных магазинах",
+  "facts": {
+    "okved_section": "G",
+    "okved": "47.76",
+    "status": "ACTIVE",
+    "revenue": 36000000,
+    "revenue_growth": 0.08,
+    "revenue_cv": 0.35,
+    "ebit": 4300000,
+    "debt": 3000000,
+    "interest": 420000,
+    "debt_service": 1100000,
+    "equity_ratio": 0.35,
+    "tax_debt": 0,
+    "age_months": 48,
+    "turnover_months": 48,
+    "bki_max_dpd_12m": 0,
+    "bki_overdue_cnt_12m": 0,
+    "bki_current_dpd": 0
+  },
+  "levers": {
+    "product": "express",
+    "requested_amount": 2000000,
+    "requested_term_m": 12,
+    "has_rko": 1,
+    "bank_turnover_month_rub": 1500000,
+    "guarantee": 0,
+    "marketplace": 0,
+    "insurance": 0,
+    "subscription": 0,
+    "bki_consent": true
+  },
+  "mock": {
+    "bki_fail": true
+  },
+  "expect": {
+    "outcome": "APPROVE"
+  }
+}

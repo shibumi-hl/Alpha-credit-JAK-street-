@@ -17,5 +17,6 @@
     "bank_turnover_month_rub": 0, "guarantee": 0, "marketplace": 0, "insurance": 0, "subscription": 0,
     "bki_consent": true
   },
+  "after_docs": {"tax_debt": 0},
   "expect": {"outcome": "REQUEST_INFO"}
 }
