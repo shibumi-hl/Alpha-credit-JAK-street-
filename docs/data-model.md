@@ -43,6 +43,12 @@ erDiagram
 
 Все даты — с часовым поясом (UTC).
 
+Одну активную заявку на клиента, компанию и продукт гарантирует база, а не только код: частичный уникальный
+индекс `uq_active_application` по `(owner, persona_id, product)` для всех статусов, кроме `REJECTED`, `ISSUED` и
+`WITHDRAWN` (`api/conveyor.py`).
+Повтор подачи с тем же ключом идемпотентности защищён ограничением `uq_owner_idempotency` по
+`(owner, idempotency_key)`.
+
 ## JSON-поля заявки
 
 **levers** — рычаги клиента (модель `Levers` в `api/app.py`); `bki_consent` при подаче всегда `true`:

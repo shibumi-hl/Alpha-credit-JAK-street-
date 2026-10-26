@@ -8,6 +8,17 @@
 
 Все компании, учётки и внешние сервисы в демо вымышлены или имитированы (см. «Что реальное, что синтетика, что мок»).
 
+## Команда, стенд и версия
+
+- **Команда JAK Street:** Яков — продукт и бизнес-анализ; Артемий — ML, интерфейс и фронтенд; Константин — бэкенд.
+- **Версия на дедлайн:** тег `v1.0-hackathon` (коммит, который проверяет жюри).
+- **Облачный стенд:** https://alfahack.artsch.dev — учётки `client` / `client` и `analyst` / `analyst`, Swagger —
+  `/api/docs`. Стенд работает на SQLite (сервер с 1 ГБ памяти); в `docker compose` — PostgreSQL 16.
+- **Документы для проверки:** архитектура — `docs/architecture.md`, API — `docs/api.md` и `docs/openapi.json`,
+  коллекция запросов — `docs/postman_collection.json`, статусы заявки — `docs/state-machine.md`, модель данных —
+  `docs/data-model.md`, тестовые сценарии T1–T7 — `docs/test-scenarios.md`, откуда цифры презентации и симуляция
+  CustDev — `docs/pitch-facts.md`, сторонние компоненты и моки — `THIRD_PARTY_NOTICES`.
+
 ## Быстрый старт
 
 ```
