@@ -20,8 +20,9 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from api import auth, dto, igor, mocks
+from api import auth, dto, igor
 from api.conveyor import Conveyor
+from api.integrations import Integrations, mock_router
 from api.personas import application, load_personas
 from scoring.whatif import AXES, SCENARIOS, Engine, _derive, evaluate, simulate, whatif
 
@@ -106,7 +107,8 @@ def create_app(engine: Engine = None, personas: dict = None) -> FastAPI:
     engine = engine or Engine.load(default_engine_path())
     personas = personas or load_personas()
     policy = engine.policy
-    conveyor = Conveyor(engine, personas)
+    integrations = Integrations(personas, engine.asof)
+    conveyor = Conveyor(engine, personas, integrations=integrations)
     llm = igor.make_llm_from_env()
 
     @contextlib.asynccontextmanager
@@ -213,11 +215,11 @@ def create_app(engine: Engine = None, personas: dict = None) -> FastAPI:
 
     @app.get("/api/v1/companies/{inn}")
     def company(inn: str):
-        return mocks.company(personas, inn, engine.asof)
+        return integrations.company(inn)
 
     @app.get("/api/v1/news")
     def news(persona_id: str):
-        return mocks.news(persona(persona_id), conveyor.latest_status(persona_id))
+        return integrations.news(persona(persona_id), conveyor.latest_status(persona_id))
 
     @app.post("/api/v1/applications", status_code=201)
     def submit(body: Submit, user: dict = Depends(auth.user), idempotency_key: str = Header(None, max_length=128)):
@@ -254,6 +256,9 @@ def create_app(engine: Engine = None, personas: dict = None) -> FastAPI:
 
         return igor.reply(p, body.levers.model_dump(), [m.model_dump() for m in body.messages], ev, wi, llm)
 
+    # встроенные моки по HTTP (/api/mock/*) - до маршрута фронта, иначе он перехватит путь
+    app.include_router(mock_router(personas, engine.asof))
+
     # собранный фронт (Docker): статика и index.html для hash-маршрутов
     dist = Path(os.environ.get("WEB_DIST", ROOT / "web" / "dist"))
     if (dist / "index.html").exists():
@@ -269,4 +274,5 @@ def create_app(engine: Engine = None, personas: dict = None) -> FastAPI:
             return FileResponse(dist / "index.html")
 
     app.state.conveyor = conveyor
+    app.state.integrations = integrations
     return app

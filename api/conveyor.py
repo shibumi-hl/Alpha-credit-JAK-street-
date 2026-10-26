@@ -18,7 +18,8 @@ from datetime import datetime, timedelta, timezone
 import sqlalchemy as sa
 from fastapi import HTTPException
 
-from api import dto, mocks
+from api import dto
+from api.integrations import Integrations
 from api.personas import application
 from scoring.whatif import _derive, evaluate
 
@@ -101,8 +102,10 @@ def _aware(t: datetime | None) -> datetime | None:
 
 
 class Conveyor:
-    def __init__(self, engine, personas: dict, url: str = None, delay: float = None):
+    def __init__(self, engine, personas: dict, url: str = None, delay: float = None, integrations=None):
         self.engine, self.personas, self.policy = engine, personas, engine.policy
+        # реестры, БКИ, лента: встроенные моки или настоящие сервисы по адресам из окружения (api/integrations.py)
+        self.integrations = integrations or Integrations(personas, engine.asof)
         url = url or os.environ.get("DATABASE_URL", "sqlite:///data/app.db")
         if url.startswith("sqlite:///") and not url.startswith("sqlite:///:"):
             os.makedirs(os.path.dirname(url[len("sqlite:///"):]) or ".", exist_ok=True)
@@ -170,7 +173,7 @@ class Conveyor:
             if row["status"] == "SUBMITTED":
                 self._move(conn, row, "DATA_CHECK", "system", "Приём и валидация: заявка полная")
             elif row["status"] == "DATA_CHECK":
-                if not mocks.bki_available(p):
+                if not self.integrations.bki_available(p):
                     ev = self._evaluate(row, bki=False)
                     reason = "Техническая ошибка: бюро кредитных историй (БКИ) не ответило после 3 попыток"
                     self._move(conn, row, "ANALYST", "system", reason + " — заявка передана аналитику",

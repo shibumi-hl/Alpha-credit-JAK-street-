@@ -598,6 +598,175 @@
       ]
     },
     {
+      "name": "Моки внешних сервисов (HTTP)",
+      "description": "Контракт реестров, БКИ и ленты (api/integrations.py). Адрес сервиса - REGISTRY_URL, BKI_URL, NEWS_URL; встроенные моки отвечают здесь по тому же контракту.",
+      "item": [
+        {
+          "name": "Реестры: компания 0010000017",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mock/registry/companies/0010000017",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mock",
+                "registry",
+                "companies",
+                "0010000017"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('marina', () => pm.expect(pm.response.json().persona_id).to.eql('marina'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Реестры: неизвестный ИНН — 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mock/registry/companies/0000000000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mock",
+                "registry",
+                "companies",
+                "0000000000"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "БКИ: отчёт по 0010000017",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mock/bki/reports/0010000017",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mock",
+                "bki",
+                "reports",
+                "0010000017"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('без текущей просрочки', () => pm.expect(pm.response.json().current_dpd).to.eql(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "БКИ: «Ромашка» не отвечает — 503 (T6)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mock/bki/reports/0060000005",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mock",
+                "bki",
+                "reports",
+                "0060000005"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 503', () => pm.response.to.have.status(503));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Лента по ИНН 0010000017",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mock/news/feed?inn=0010000017",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mock",
+                "news",
+                "feed"
+              ],
+              "query": [
+                {
+                  "key": "inn",
+                  "value": "0010000017"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('есть новости', () => pm.expect(pm.response.json().length).to.be.above(0));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Заявки",
       "item": [
         {
